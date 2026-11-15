@@ -1,0 +1,64 @@
+# Mode A (PLAN.md appendix A): Ollama and the app as two containers.
+#   docker compose up -d
+#   docker compose exec ollama ollama pull bge-m3
+#   docker compose exec ollama ollama pull llama3.1      # or qwen2.5:3b on 8 GB RAM
+#   docker compose exec app python -m app.cli seed-demo  # optional demo company
+# Then open http://localhost:8000/site (demo) or http://localhost:8000 (console).
+#
+# Mode B, Ollama already running on the host:
+#   docker compose -f compose.yaml -f compose.host-ollama.yaml up -d
+#
+# The app image is pulled from GitHub Container Registry when it's published
+# (.github/workflows/release-image.yml); otherwise, or with --build, it's built
+# from this folder.
+
+services:
+  ollama:
+    image: ollama/ollama:latest # pin a version later (Phase 8)
+    volumes:
+      - ollama_models:/root/.ollama
+    # No published port: the app reaches Ollama on Compose's own network
+    # (http://ollama:11434), so this works next to an Ollama already installed on
+    # the host, which holds port 11434. Use `docker compose exec ollama ollama ...`.
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    # GPU (NVIDIA): uncomment
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
+  app:
+    image: ghcr.io/carlosgild-web/local-rag-ollama:latest
+    build: .
+    environment:
+      OLLAMA_BASE_URL: http://ollama:11434
+      DATA_DIR: /data
+      CHAT_MODEL: ${CHAT_MODEL:-llama3.1}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-bge-m3}
+      WATCH_POLLING: "true"
+      WATCH_ROOTS: /watch # only the mounted inbox can be watched (decision 0025)
+      WEB_CONCURRENCY: "1"
+      # Optional password for the console, the intranet and the API (decision 0026).
+      APP_PASSWORD: ${APP_PASSWORD:-}
+    volumes:
+      - app_data:/data
+      # Watched folders (decision 0025): add /watch on the Watched folders page and
+      # drop files into ./inbox. Read-only: the app copies files, never changes them.
+      - ./inbox:/watch:ro
+    ports:
+      # APP_PORT picks another port when 8000 is taken (the start scripts set it in .env).
+      - "127.0.0.1:${APP_PORT:-8000}:8000"
+    depends_on:
+      ollama:
+        condition: service_healthy
+
+volumes:
+  ollama_models:
+  app_data:

@@ -1,0 +1,379 @@
+import { AlertTriangle, Loader2, MessageSquarePlus, Send, Square, ThumbsDown, ThumbsUp } from "lucide-react";
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import type { CitationStatus, Message, Source } from "@/api/types";
+import { CitedAnswer, SourceList } from "@/components/CitedAnswer";
+import { ErrorNote } from "@/components/common";
+import { Button } from "@/components/ui/button";
+import { Input, Textarea } from "@/components/ui/input";
+import { useCollections, useFeedback, useSession, useSessions } from "@/hooks/queries";
+import { endsWithQuestion, useChatStream } from "@/hooks/useChatStream";
+import { useSystemStatus } from "@/hooks/useSystemStatus";
+import { Paused } from "@/components/Paused";
+import { cn, formatDate } from "@/lib/utils";
+
+export default function Chat() {
+  const params = useParams();
+  const navigate = useNavigate();
+  const sessionId = params.sessionId ? Number(params.sessionId) : null;
+
+  const [historySearch, setHistorySearch] = useState("");
+  const sessions = useSessions(historySearch.trim());
+  const system = useSystemStatus();
+  const session = useSession(sessionId);
+  const collections = useCollections();
+  const shelves = collections.data ?? [];
+  // The shelf to search: the open session's, else the one used last.
+  // A console session saved without a shelf searches all of them.
+  const [chosen, setChosen] = useState<ShelfChoice | undefined>(() => {
+    const raw = localStorage.getItem(LAST_SHELF_KEY);
+    if (raw === ALL_SHELVES) return ALL_SHELVES;
+    const stored = Number(raw);
+    return Number.isFinite(stored) && stored > 0 ? stored : undefined;
+  });
+  const sessionShelf: ShelfChoice | undefined =
+    sessionId === null || !session.data ? undefined : (session.data.collection_id ?? ALL_SHELVES);
+  useEffect(() => {
+    if (sessionShelf != null) setChosen(sessionShelf);
+  }, [sessionShelf]);
+  const shelfId: ShelfChoice | undefined =
+    chosen === ALL_SHELVES
+      ? shelves.length > 1
+        ? ALL_SHELVES
+        : shelves[0]?.id
+      : shelves.some((c) => c.id === chosen)
+        ? chosen
+        : shelves.length === 1
+          ? shelves[0].id
+          : undefined;
+  // An open session whose shelf was rebuilt: the server follows it to the new copy.
+  const needsShelfChoice = shelfId === undefined && sessionId === null && shelves.length > 1;
+  const chooseShelf = (choice: ShelfChoice) => {
+    setChosen(choice);
+    localStorage.setItem(LAST_SHELF_KEY, String(choice));
+  };
+  const [question, setQuestion] = useState("");
+
+  const onSession = useCallback((id: number) => navigate(`/chat/${id}`, { replace: true }), [navigate]);
+  const { pending, ask, stop, reset, isStreaming } = useChatStream(onSession);
+
+  const bottom = useRef<HTMLDivElement>(null);
+  const messages = sessionId === null ? [] : (session.data?.messages ?? []);
+  useEffect(() => {
+    bottom.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [messages.length, pending?.answer]);
+
+  const submit = () => {
+    const text = question.trim();
+    if (!text || isStreaming || needsShelfChoice || shelves.length === 0) return;
+    setQuestion("");
+    if (shelfId === ALL_SHELVES) ask(text, sessionId, undefined, { all_shelves: true });
+    else ask(text, sessionId, shelfId);
+  };
+
+  return (
+    <div className="flex h-full">
+      <aside className="flex w-64 shrink-0 flex-col border-r">
+        <div className="p-3">
+          <Button
+            variant="outline"
+            className="w-full"
+            onClick={() => {
+              reset();
+              navigate("/chat");
+            }}
+          >
+            <MessageSquarePlus /> New chat
+          </Button>
+          <Input
+            value={historySearch}
+            onChange={(e) => setHistorySearch(e.target.value)}
+            placeholder="Search conversations"
+            className="mt-2 h-8"
+            aria-label="Search conversations"
+          />
+        </div>
+        <nav className="flex-1 space-y-0.5 overflow-y-auto px-2 pb-3">
+          {sessions.data?.map((s) => (
+            <Link
+              key={s.id}
+              to={`/chat/${s.id}`}
+              className={cn(
+                "block rounded-md px-3 py-2 text-sm hover:bg-muted",
+                s.id === sessionId && "bg-muted font-medium",
+              )}
+            >
+              <div className="truncate">{s.title}</div>
+              <div className="text-xs font-normal text-muted-foreground">{formatDate(s.created_at)}</div>
+            </Link>
+          ))}
+          {sessions.data?.length === 0 && (
+            <p className="px-3 py-2 text-xs text-muted-foreground">
+              {historySearch.trim() ? "No conversation mentions that." : "No conversations yet."}
+            </p>
+          )}
+        </nav>
+      </aside>
+
+      <section className="flex min-w-0 flex-1 flex-col">
+        {/* The shelf decides what can be found; keep it in plain sight, not in the footer. */}
+        <div className="border-b px-6 py-2">
+          <div className="mx-auto flex max-w-3xl items-center gap-2 text-sm">
+            {collections.isSuccess && shelves.length === 0 ? (
+              <span className="text-warning">
+                No shelves yet: <Link to="/library" className="underline">upload documents</Link> first.
+              </span>
+            ) : (
+              <label className={cn("flex items-center gap-2", needsShelfChoice ? "text-warning" : "text-muted-foreground")}>
+                {needsShelfChoice ? "Choose a shelf to search:" : "Searching shelf:"}
+                <select
+                  className="rounded-md border bg-background px-2 py-1 font-medium text-foreground"
+                  value={shelfId ?? ""}
+                  onChange={(e) => chooseShelf(e.target.value === ALL_SHELVES ? ALL_SHELVES : Number(e.target.value))}
+                  aria-label="Shelf to search"
+                >
+                  {shelfId === undefined && <option value="">—</option>}
+                  {shelves.length > 1 && <option value={ALL_SHELVES}>All shelves</option>}
+                  {shelves.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+                <span className="text-xs text-muted-foreground">
+                  {shelfId === ALL_SHELVES
+                    ? "Every shelf is searched; the best passages win."
+                    : "Only this shelf's documents are used."}
+                </span>
+              </label>
+            )}
+          </div>
+        </div>
+        <div className="flex-1 overflow-y-auto">
+          <div className="mx-auto max-w-3xl space-y-6 px-6 py-8">
+            {messages.length === 0 && !pending && <Welcome />}
+            <ErrorNote error={session.error} />
+            {messages.map((m) => (
+              <MessageView key={m.id} message={m} sessionId={sessionId} />
+            ))}
+            {pending && (
+              <>
+                {/* A new session loads with the question already saved; don't show it twice. */}
+                {!endsWithQuestion(messages, pending.question) && <UserBubble text={pending.question} />}
+                <AssistantBubble
+                  content={pending.answer}
+                  sources={pending.sources}
+                  streaming={pending.status === "streaming"}
+                  idleText={
+                    pending.status === "stopped"
+                      ? "Stopped before the answer started."
+                      : pending.status === "error"
+                        ? "No answer."
+                        : undefined
+                  }
+                  footer={
+                    pending.status === "stopped" && (
+                      <p className="mt-2 text-xs text-muted-foreground">Stopped. The partial answer is saved.</p>
+                    )
+                  }
+                />
+                {pending.error && <ErrorNote error={pending.error} />}
+              </>
+            )}
+            <div ref={bottom} />
+          </div>
+        </div>
+
+        <Paused reason={system.canBrowse ? system.chatBlocked : null} what="Asking questions" compact>
+        <div className="border-t bg-background px-6 py-4">
+          <div className="mx-auto max-w-3xl space-y-2">
+            <div className="flex items-end gap-2">
+              <Textarea
+                rows={2}
+                value={question}
+                placeholder="Ask about your documents… (Enter to send, Shift+Enter for a new line)"
+                onChange={(e) => setQuestion(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    submit();
+                  }
+                }}
+                className="resize-none"
+              />
+              {isStreaming ? (
+                <Button variant="outline" size="icon" className="size-10" title="Stop" onClick={stop}>
+                  <Square />
+                </Button>
+              ) : (
+                <Button
+                  size="icon"
+                  className="size-10"
+                  title="Send"
+                  onClick={submit}
+                  disabled={!question.trim() || needsShelfChoice || shelves.length === 0}
+                >
+                  <Send />
+                </Button>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Answers use only your documents and cite them. Each question is answered on its own.
+            </p>
+          </div>
+        </div>
+        </Paused>
+      </section>
+    </div>
+  );
+}
+
+const LAST_SHELF_KEY = "chat.lastShelf";
+const ALL_SHELVES = "all";
+/** A shelf id, or every active shelf. */
+type ShelfChoice = number | typeof ALL_SHELVES;
+
+function Welcome() {
+  return (
+    <div className="py-16 text-center">
+      <h2 className="text-lg font-semibold">Ask your documents</h2>
+      <p className="mt-2 text-sm text-muted-foreground">
+        Answers come only from the files in your <Link to="/library" className="underline">library</Link>,
+        with numbered citations. If the answer isn't there, it says so.
+      </p>
+    </div>
+  );
+}
+
+function UserBubble({ text }: { text: string }) {
+  return (
+    <div className="flex justify-end">
+      <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-sm bg-primary px-4 py-2.5 text-sm text-primary-foreground">
+        {text}
+      </div>
+    </div>
+  );
+}
+
+function AssistantBubble({
+  content,
+  sources,
+  streaming,
+  idleText,
+  footer,
+}: {
+  content: string;
+  sources: Source[];
+  streaming?: boolean;
+  /** Shown instead of the spinner when there is no answer and none is coming. */
+  idleText?: string;
+  footer?: ReactNode;
+}) {
+  const [highlighted, setHighlighted] = useState<number | null>(null);
+  const toggle = (rank: number) => setHighlighted((h) => (h === rank ? null : rank));
+  return (
+    <div className="max-w-[92%] rounded-2xl rounded-bl-sm border bg-muted/30 px-4 py-3">
+      {content ? (
+        <CitedAnswer content={content} sources={sources} highlighted={highlighted} onCite={toggle} />
+      ) : idleText ? (
+        <p className="text-sm text-muted-foreground">{idleText}</p>
+      ) : (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="size-4 animate-spin" />
+          {sources.length ? "Writing the answer…" : "Searching your documents…"}
+        </div>
+      )}
+      {streaming && content && <span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse bg-foreground/60 align-middle" />}
+      <SourceList sources={sources} highlighted={highlighted} onSelect={toggle} />
+      {footer}
+    </div>
+  );
+}
+
+function MessageView({ message, sessionId }: { message: Message; sessionId: number | null }) {
+  const feedback = useFeedback(sessionId);
+  if (message.role === "user") return <UserBubble text={message.content} />;
+  const vote = message.feedback?.thumbs_up;
+  return (
+    <AssistantBubble
+      content={message.content}
+      sources={message.sources}
+      footer={
+        <>
+        <CitationWarning status={message.citation_status} />
+        <div className="mt-2 flex items-center gap-1 text-xs text-muted-foreground">
+          <Button
+            variant="ghost"
+            size="icon"
+            className={cn("size-7", vote === true && "text-success")}
+            title="Helpful"
+            onClick={() => feedback.mutate({ messageId: message.id, thumbsUp: true })}
+          >
+            <ThumbsUp />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className={cn("size-7", vote === false && "text-destructive")}
+            title="Not helpful"
+            onClick={() => feedback.mutate({ messageId: message.id, thumbsUp: false })}
+          >
+            <ThumbsDown />
+          </Button>
+          {vote === false && <WhatWasWrong message={message} onSend={(comment) => feedback.mutate({ messageId: message.id, thumbsUp: false, comment })} />}
+          <span className="ml-auto">
+            {message.rag_profile_id !== null && `profile #${message.rag_profile_id} · `}
+            {formatDate(message.created_at)}
+          </span>
+        </div>
+        </>
+      }
+    />
+  );
+}
+
+/** After "not helpful": an optional note on what was wrong, shown on the dashboard. */
+function WhatWasWrong({ message, onSend }: { message: Message; onSend: (comment: string) => void }) {
+  const [text, setText] = useState("");
+  if (message.feedback?.comment) {
+    return <span className="truncate italic">“{message.feedback.comment}”</span>;
+  }
+  return (
+    <form
+      className="flex items-center gap-1"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (text.trim()) onSend(text.trim());
+      }}
+    >
+      <Input
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        placeholder="What was wrong? (optional)"
+        className="h-7 w-56 text-xs"
+        maxLength={2000}
+      />
+      <Button type="submit" variant="ghost" size="sm" className="h-7 px-2" disabled={!text.trim()}>
+        Send
+      </Button>
+    </form>
+  );
+}
+
+const CITATION_WARNING: Partial<Record<CitationStatus, string>> = {
+  missing: "This answer has no citations, so it could not be checked against the sources. Verify it below.",
+  invalid: "Some citation numbers don't match a source. Verify the answer against the sources below.",
+};
+
+/** Invariant 6: citations are mandatory. The model sometimes skips them or
+ * cites a number that has no source; say so instead of hiding it. */
+function CitationWarning({ status }: { status: CitationStatus | null }) {
+  const text = status ? CITATION_WARNING[status] : undefined;
+  if (!text) return null;
+  return (
+    <p className="mt-2 flex items-start gap-1.5 text-xs text-warning">
+      <AlertTriangle className="mt-px size-3.5 shrink-0" />
+      {text}
+    </p>
+  );
+}

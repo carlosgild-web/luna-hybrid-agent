@@ -1,0 +1,36 @@
+# Data (never commit documents, DB, vectors, backups)
+data/
+# The folder compose.yaml mounts as /watch for watched folders (decision 0025)
+inbox/
+
+# Python
+backend/.venv/
+**/__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.coverage
+coverage.md
+htmlcov/
+*.egg-info/
+
+# Env
+.env
+.env.*
+!.env.example
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Claude Code local session state
+.claude/
+
+# Logs
+*.log
