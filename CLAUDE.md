@@ -57,9 +57,10 @@ uvicorn app.main:app --reload --port 8000
 pytest -q
 ruff check . && ruff format --check .
 
-# CLI (phases 1-2)
+# CLI
 python -m app.cli ingest ./docs
 python -m app.cli ask "your question"
+python -m app.cli seed-business-db   # the demo business DB, DATA_DIR/business/hilda_luna.db
 
 # frontend
 cd frontend && npm ci && npm run dev      # Vite dev server, proxies /api to :8000
