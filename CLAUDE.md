@@ -1,19 +1,31 @@
-# CLAUDE.md — Local RAG with Ollama
+# CLAUDE.md — Luna Hybrid Agent
 
-Read this file first in every session. The full roadmap is in `PLAN.md`.
+Read this file first in every session. The roadmap for this repo is in
+`PLAN_HYBRID.md`. `PLAN.md` is the finished roadmap of the baseline app
+(`local-rag-ollama` v1.0.1); the decisions and tests still refer to it, but it gets no new phases.
 
 ## What this project is
 
-A fully local RAG (retrieval-augmented generation) app: Ollama for chat and embeddings,
-a FastAPI backend, a React web UI to manage documents, versions, history and settings.
-No cloud calls at runtime. It will be published as a GitHub portfolio project, so
-code quality, tests, README and "clone and run" experience matter.
+A hybrid agent built on a finished local RAG app. Luna decides, per question, whether
+to search the document library (RAG), query the demo company's business database (SQL
+function calling), call one external API (FX rates), or combine them, and she shows
+every step in an agent trace. Everything runs locally on Ollama. External calls are an
+explicit, optional exception behind `ALLOW_EXTERNAL_APIS`.
+
+The baseline is a fully local RAG app: Ollama for chat and embeddings, a FastAPI
+backend, and a React web UI to manage documents, versions, history and settings. It is
+published as a GitHub portfolio project (portfolio project #2; `local-rag-ollama` stays
+frozen as #1), so code quality, tests, README and "clone and run" experience matter.
 
 ## Stack (do not change without asking)
 
 | Layer | Choice |
 |---|---|
 | LLM runtime | Ollama (chat: `qwen2.5:7b` or `llama3.1:8b`; embeddings: `bge-m3`) |
+| Agent | Own bounded loop on Ollama's native `tools` API, no agent framework (decision 0032) |
+| Business data | `DATA_DIR/business/hilda_luna.db`, a seeded SQLite file opened read-only (separate from `app.db`) |
+| External API | One FX-rate source over `httpx`, off unless `ALLOW_EXTERNAL_APIS=true` |
+| Charts | Backend stores a chart spec; the React chat renders it (recharts) |
 | Backend | Python 3.11+, FastAPI, SQLAlchemy, Alembic, pydantic-settings |
 | Vector store | ChromaDB (persistent) behind a `VectorStore` interface |
 | Keyword search | SQLite FTS5, fused with vectors via RRF |
@@ -27,6 +39,7 @@ code quality, tests, README and "clone and run" experience matter.
 
 ```
 backend/app/{api,core,ingest,retrieval,llm,versioning,jobs,db,eval}/
+backend/app/agent/    # loop.py, registry.py, trace.py, tools/ (one file per domain)
 backend/migrations/   backend/tests/
 frontend/src/{pages,components,api,hooks}/
 data/                 # gitignored: files/, chroma/, app.db, backups/, hf/
@@ -77,6 +90,21 @@ backend/.venv/Scripts/python.exe e2e/run_e2e.py --run-dir <dir> --server-log <se
 7. **Audit everything.** Uploads, deletes, rollbacks, reindexes and settings changes
    write to `audit_log`.
 
+### Agent invariants (PLAN_HYBRID.md section 6)
+
+8. **Bounded and traced.** The agent loop is bounded (`AGENT_MAX_ITERATIONS`) and every
+   run writes a trace.
+9. **Read-only business data.** The business DB connection is read-only; `sql_select`
+   accepts a single SELECT/WITH statement; tool handlers never import the service
+   layer's writers.
+10. **External by consent.** No external call unless `ALLOW_EXTERNAL_APIS=true`; every
+    external call is audited, and its failure degrades to the stored value, never to an
+    error answer.
+11. **Reconstructible answers.** Tool results shown to the model are also stored verbatim
+    in the trace. An answer must be reconstructible from its trace.
+12. **Numbers come from tools.** Numeric claims in answers come from tool results, never
+    from the model's memory.
+
 ## Container-ready rules (follow from day one)
 
 - All config comes from environment variables via `core/config.py`; keep `.env.example` updated.
@@ -96,20 +124,22 @@ backend/.venv/Scripts/python.exe e2e/run_e2e.py --run-dir <dir> --server-log <se
   soft delete, blue/green swap).
 - Keep a small open-license test corpus in `backend/tests/corpus/` (Spanish and English).
   Never add personal documents to the repo.
-- A phase is not done until its "Done when" criteria in `PLAN.md` pass and `ruff` and
+- A phase is not done until its "Done when" criteria in `PLAN_HYBRID.md` pass and `ruff` and
   `pytest` are green.
 
 ## How to work in this repo
 
-- One phase per session. Start by reading `PLAN.md` for that phase.
-- For phases 3 and 5 (API and versioning), propose a short plan and wait for approval before coding.
+- One phase per session. Start by reading `PLAN_HYBRID.md` for that phase.
+- For Phase 3 (agent loop), propose a short plan and wait for approval before coding.
 - Make small commits with clear messages (conventional commits: `feat:`, `fix:`, `test:`, `docs:`).
-- If a decision deviates from `PLAN.md`, add a short note in `docs/decisions/` and tell me.
+- If a decision deviates from `PLAN_HYBRID.md`, add a short note in `docs/decisions/` and tell me.
 - Ask before adding a new dependency, and prefer the standard library or what is already installed.
+- Until this repo publishes its first release, `compose.yaml` (GHCR image) and the start scripts (`web-dist.zip`) still download the v1.0.1 artifacts from `local-rag-ollama`. Switch them to `luna-hybrid-agent` together with the first release (Phase 8).
 
 ## Do not
 
-- Call any cloud or third-party API at runtime.
+- Call any cloud or third-party API at runtime, except the FX tool behind `ALLOW_EXTERNAL_APIS=true` (invariant 10).
+- Write to the business DB, or add an agent or RAG framework (decision 0032).
 - Commit `data/`, `.env`, model weights, or personal documents.
 - Run more than one uvicorn worker.
 - Bypass the service layer, or hard-delete versions without going through the trash.
