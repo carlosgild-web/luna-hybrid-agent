@@ -1,8 +1,18 @@
 # Changelog
 
-The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follow the phases in [PLAN.md](PLAN.md).
+The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follow the phases in [PLAN_HYBRID.md](PLAN_HYBRID.md); entries from 1.0.1 down are from the baseline app, [local-rag-ollama](https://github.com/carlosgild-web/local-rag-ollama), and follow [PLAN.md](PLAN.md).
 
 ## [Unreleased]
+
+### Added
+
+- **Phase 0, the new repo.** `luna-hybrid-agent` starts from `local-rag-ollama` (v1.0.1 plus the CodeQL fix below) as one baseline commit. Added the plan ([PLAN_HYBRID.md](PLAN_HYBRID.md)), the agent invariants in `CLAUDE.md`, and [decision 0032](docs/decisions/0032-no-agent-framework.md): why there's no LangChain or LlamaIndex.
+
+### Changed
+
+- The app is now called **Luna Hybrid Agent** (API title, browser tab, console sidebar). The README is a short stub until Phase 8 rewrites it.
+
+The entries below were already unreleased in `local-rag-ollama` at the time of the import.
 
 ### Security
 
