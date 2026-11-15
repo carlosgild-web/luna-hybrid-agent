@@ -572,7 +572,7 @@ explain_check() {
 
 do_start() {
   say ""
-  say "Local RAG with Ollama: one-command start"
+  say "Luna Hybrid Agent: one-command start"
   say "Everything runs on this computer; your documents never leave it."
   read_settings
   local saved_route="$START_ROUTE" port="${APP_PORT:-8000}" ram_gb free_gb suggested

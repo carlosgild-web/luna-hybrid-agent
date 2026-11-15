@@ -147,9 +147,9 @@ def create_app(runtime: Runtime | None = None, *, start_worker: bool = True) -> 
             app.state.runtime.engine.dispose()
 
     app = FastAPI(
-        title="Local RAG with Ollama",
+        title="Luna Hybrid Agent",
         version=__version__,
-        description="Fully local retrieval-augmented generation: documents, versions, chat.",
+        description="Local-first hybrid agent: document search, business SQL and tools, on Ollama.",
         lifespan=lifespan,
     )
 

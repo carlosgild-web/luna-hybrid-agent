@@ -18,7 +18,7 @@ import { cn } from "@/lib/utils";
 import { type Bi, useT } from "./i18n";
 
 const KEY = "hl-demo-guide";
-const REPO = "https://github.com/carlosgild-web/local-rag-ollama#readme";
+const REPO = "https://github.com/carlosgild-web/luna-hybrid-agent#readme";
 
 type Mode = "open" | "pill";
 const listeners = new Set<() => void>();

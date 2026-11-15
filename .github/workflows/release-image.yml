@@ -1,6 +1,6 @@
 # Publishes the app image to GitHub Container Registry, so anyone can run the
 # app with `docker compose up` without building it:
-#   ghcr.io/carlosgild-web/local-rag-ollama:<version> and :latest
+#   ghcr.io/carlosgild-web/luna-hybrid-agent:<version> and :latest
 # Runs on a version tag (v0.6.0, ...) or by hand from the Actions tab.
 name: Release image
 

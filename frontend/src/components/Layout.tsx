@@ -68,7 +68,7 @@ const PILL: Record<SystemState, { label: string; className: string; dot: string 
   unreachable: { label: "Server not reachable", className: "bg-destructive text-destructive-foreground", dot: "bg-white" },
 };
 
-const TITLE = "Local RAG";
+const TITLE = "Luna Agent";
 
 export function Layout() {
   return (
@@ -98,7 +98,7 @@ function Shell() {
         <div className="flex items-center gap-2 px-5 pb-3 pt-5">
           <img src="/favicon.svg" alt="" className="size-7" />
           <div>
-            <div className="text-sm font-semibold leading-tight">Local RAG</div>
+            <div className="text-sm font-semibold leading-tight">{TITLE}</div>
             <div className="text-xs text-muted-foreground">Ollama, on this machine</div>
           </div>
         </div>
@@ -351,13 +351,13 @@ function useDesktopNotifications() {
     if (result === "granted") {
       localStorage.setItem(NOTIFY_KEY, "1");
       setEnabled(true);
-      new Notification("Local RAG", { body: "You'll be notified here when the system status changes." });
+      new Notification(TITLE, { body: "You'll be notified here when the system status changes." });
     }
   };
 
   const send = useCallback(
     (title: string, body: string) => {
-      if (enabled && document.hidden) new Notification(`Local RAG: ${title}`, { body, tag: "system-status" });
+      if (enabled && document.hidden) new Notification(`${TITLE}: ${title}`, { body, tag: "system-status" });
     },
     [enabled],
   );

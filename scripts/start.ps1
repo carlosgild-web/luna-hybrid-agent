@@ -614,7 +614,7 @@ function Explain-Check([string]$OllamaState, [hashtable]$Docker, [hashtable]$s, 
 
 function Do-Start {
     Say ""
-    Say "Local RAG with Ollama: one-command start"
+    Say "Luna Hybrid Agent: one-command start"
     Say "Everything runs on this computer; your documents never leave it."
 
     $s = Read-Settings
