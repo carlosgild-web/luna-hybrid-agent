@@ -60,6 +60,10 @@ HYBRID_WHEN = """\
 Call the tool that has the facts: search_documents for what a document says, the database \
 tools for stock, sales and purchases. A question that compares the two needs both. You may \
 call several tools.
+- The documents cover HR policies (time off, benefits, holidays), workshop safety, \
+customer questions, shipping and returns, products and prices, supplier agreements and \
+meeting notes. For any question about these, call search_documents first. Never say the \
+documents don't have something before you have searched them.
 - Cite each fact from a document with its passage number, e.g. [2]. Facts from the database \
 get no number: say they come from the database (the sales records, the inventory).
 - If a document and the database disagree, say so and give both figures."""

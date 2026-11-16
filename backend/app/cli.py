@@ -327,11 +327,27 @@ def cmd_agent_eval(args: argparse.Namespace) -> int:
         print("no case matches --tier/--case")
         return 1
     started_at = agent_runner.now()
-    counter = {"n": 0}
+    out = Path(args.out) if args.out else None
+    if out is None and not args.fake:
+        out = get_settings().data_dir / "eval" / "agent"
+    run: dict = {"results": []}  # model, limits and judge_model are set before the run
+
+    def report_so_far() -> dict:
+        return agent_runner.build_report(
+            run["results"],
+            label=args.label or ("fake" if args.fake else run["model"]),
+            model=run["model"],
+            limits=run["limits"],
+            started_at=started_at,
+            fake=args.fake,
+            judge_model=run["judge_model"],
+        )
 
     def on_result(result) -> None:
-        counter["n"] += 1
-        _print_case(result, counter["n"], len(cases))
+        run["results"].append(result)
+        _print_case(result, len(run["results"]), len(cases))
+        if out is not None:  # after every case, so a run that is stopped keeps its numbers
+            agent_runner.write_report(report_so_far(), out)
 
     started = time.perf_counter()
     if args.fake:
@@ -340,6 +356,8 @@ def cmd_agent_eval(args: argparse.Namespace) -> int:
             with agent_runner.fake_runtime(Path(tmp) / "data") as runtime:
                 limits = AgentLimits.from_settings(runtime.settings)
                 model = agent_runner.FAKE_MODEL
+                judge_model = model if args.judge else None
+                run.update(model=model, limits=limits, judge_model=judge_model)
                 results = agent_runner.run_suite(
                     suite,
                     cases,
@@ -350,7 +368,6 @@ def cmd_agent_eval(args: argparse.Namespace) -> int:
                     judge=agent_runner.ScriptedLLM(cases[0]) if args.judge else None,
                     on_result=on_result,
                 )
-        judge_model = model if args.judge else None
     else:
         from app.db import backup
         from app.versioning.agent_traces import save_trace
@@ -369,6 +386,7 @@ def cmd_agent_eval(args: argparse.Namespace) -> int:
         model = args.model or settings.agent_chat_model
         judge_model = (args.judge_model or model) if args.judge else None
         limits = AgentLimits.from_settings(settings)
+        run.update(model=model, limits=limits, judge_model=judge_model)
         print(f"{len(cases)} questions with {model}; traces are stored as they finish")
 
         def save(trace) -> None:
@@ -387,20 +405,9 @@ def cmd_agent_eval(args: argparse.Namespace) -> int:
             on_result=on_result,
         )
 
-    report = agent_runner.build_report(
-        results,
-        label=args.label or ("fake" if args.fake else model),
-        model=model,
-        limits=limits,
-        started_at=started_at,
-        fake=args.fake,
-        judge_model=judge_model,
-    )
+    report = report_so_far()
     print(f"\n{len(results)} questions in {time.perf_counter() - started:.0f} s\n")
     print(agent_suite.metrics_table([report]))
-    out = Path(args.out) if args.out else None
-    if out is None and not args.fake:
-        out = get_settings().data_dir / "eval" / "agent"
     if out is not None:
         print(f"\nreport: {agent_runner.write_report(report, out)}")
     return 1 if args.fake and report["metrics"]["passed"] < len(results) else 0
