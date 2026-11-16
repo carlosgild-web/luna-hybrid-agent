@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { AuthGate } from "@/components/AuthGate";
 import { Layout } from "@/components/Layout";
 import { PageGate } from "@/components/Paused";
+import AgentRun from "@/pages/AgentRun";
 import Chat from "@/pages/Chat";
 import Collections from "@/pages/Collections";
 import Dashboard from "@/pages/Dashboard";
@@ -74,6 +75,7 @@ export default function App() {
         <Route path="watched" element={<PageGate what="Watched folders"><WatchedFolders /></PageGate>} />
         {/* One route, so starting a new chat keeps the page (and its stream) mounted. */}
         <Route path="chat/:sessionId?" element={<PageGate what="Chat"><Chat /></PageGate>} />
+        <Route path="agent/:traceId" element={<PageGate what="The Agent inspector"><AgentRun /></PageGate>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

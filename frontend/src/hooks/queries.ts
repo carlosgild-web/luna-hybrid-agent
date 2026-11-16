@@ -182,6 +182,16 @@ export function useRestoreDocument() {
 }
 
 /** A citation's passage; fetched only when someone opens it. */
+/** A stored agent run (Phase 6); runs never change once saved. */
+export function useAgentTrace(id: number | null | undefined) {
+  return useQuery({
+    queryKey: ["agentTrace", id],
+    queryFn: () => api.agentTrace(id as number),
+    enabled: id != null,
+    staleTime: Number.POSITIVE_INFINITY,
+  });
+}
+
 export function useChunk(id: number | null) {
   return useQuery({
     queryKey: ["chunk", id],

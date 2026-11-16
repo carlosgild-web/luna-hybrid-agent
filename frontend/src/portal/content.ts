@@ -240,6 +240,17 @@ export const SUGGESTIONS: Bi[] = [
   { es: "¿Cuál es la política de devoluciones?", en: "What is the returns policy?" },
 ];
 
+/** Agent mode (Phase 6): questions that need the business data, or both sources. */
+export const AGENT_SUGGESTIONS: Bi[] = [
+  { es: "¿Qué productos están por debajo de su punto de reorden?", en: "Which products are below their reorder level?" },
+  { es: "Haz una gráfica de las ventas del tercer trimestre por mes", en: "Chart Q3 2026 sales by month" },
+  {
+    es: "¿Las ventas de CH-2004 en el Q3 coinciden con las notas de la reunión?",
+    en: "Do CH-2004's Q3 sales match what the Q3 meeting notes say?",
+  },
+  { es: "¿Cuánto son 2,500 USD en pesos?", en: "How much is 2,500 USD in pesos?" },
+];
+
 export const SECTIONS = {
   season: {
     title: { es: "Esta temporada", en: "This season" },

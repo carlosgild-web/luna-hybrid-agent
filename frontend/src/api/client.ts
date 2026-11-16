@@ -1,4 +1,5 @@
 import type {
+  AgentTrace,
   AuditEntry,
   AuditFilters,
   Channel,
@@ -186,6 +187,7 @@ export const api = {
   sessions: (channel: Channel = "admin", q?: string) =>
     request<SessionSummary[]>(`/sessions${query({ limit: 100, channel, q: q || undefined })}`),
   session: (id: number) => request<Session>(`/sessions/${id}`),
+  agentTrace: (id: number) => request<AgentTrace>(`/agent/traces/${id}`),
   feedback: (messageId: number, thumbsUp: boolean, comment?: string) =>
     request<unknown>(
       `/messages/${messageId}/feedback`,

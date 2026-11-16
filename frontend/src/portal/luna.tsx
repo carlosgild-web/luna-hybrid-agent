@@ -22,6 +22,10 @@ import { useLang } from "./i18n";
 const CURRENT_KEY = "hl-luna-session";
 const RECENT_KEY = "hl-luna-recent";
 const RECENT_MAX = 12;
+const MODE_KEY = "hl-luna-mode";
+
+/** Documents only (RAG), or the agent with tools (Phase 6, the default). */
+export type LunaMode = "docs" | "agent";
 
 export interface RecentChat {
   id: number;
@@ -53,6 +57,8 @@ interface LunaState {
   pending: PendingAnswer | null;
   isStreaming: boolean;
   recent: RecentChat[];
+  mode: LunaMode;
+  setMode: (mode: LunaMode) => void;
   ask: (question: string) => void;
   stop: () => void;
   newChat: () => void;
@@ -68,6 +74,11 @@ export function LunaProvider({ children }: { children: ReactNode }) {
   const [sessionId, setSessionId] = useState<number | null>(() => read<number | null>(CURRENT_KEY, null));
   const [recent, setRecent] = useState<RecentChat[]>(() => read<RecentChat[]>(RECENT_KEY, []));
   const [bubbleOpen, setBubbleOpen] = useState(false);
+  const [mode, setModeState] = useState<LunaMode>(() => (read<LunaMode>(MODE_KEY, "agent") === "docs" ? "docs" : "agent"));
+  const setMode = useCallback((next: LunaMode) => {
+    setModeState(next);
+    write(MODE_KEY, next);
+  }, []);
   const lastQuestion = useRef("");
 
   const session = useSession(sessionId);
@@ -98,9 +109,10 @@ export function LunaProvider({ children }: { children: ReactNode }) {
       const text = question.trim();
       if (!text) return;
       lastQuestion.current = text;
-      void stream.ask(text, sessionId, undefined, { channel: "intranet", answer_language: lang });
+      if (mode === "agent") void stream.ask(text, sessionId, undefined, { channel: "intranet" }, { agent: true });
+      else void stream.ask(text, sessionId, undefined, { channel: "intranet", answer_language: lang });
     },
-    [stream, sessionId, lang],
+    [stream, sessionId, lang, mode],
   );
 
   const newChat = useCallback(() => {
@@ -126,6 +138,8 @@ export function LunaProvider({ children }: { children: ReactNode }) {
       pending: stream.pending,
       isStreaming: stream.isStreaming,
       recent,
+      mode,
+      setMode,
       ask,
       stop: () => void stream.stop(),
       newChat,
@@ -133,7 +147,7 @@ export function LunaProvider({ children }: { children: ReactNode }) {
       bubbleOpen,
       setBubbleOpen,
     }),
-    [sessionId, session.data, session.isLoading, stream, recent, ask, newChat, openChat, bubbleOpen],
+    [sessionId, session.data, session.isLoading, stream, recent, mode, setMode, ask, newChat, openChat, bubbleOpen],
   );
 
   return <LunaContext.Provider value={value}>{children}</LunaContext.Provider>;

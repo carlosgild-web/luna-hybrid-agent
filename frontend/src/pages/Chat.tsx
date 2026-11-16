@@ -2,6 +2,10 @@ import { AlertTriangle, Loader2, MessageSquarePlus, Send, Square, ThumbsDown, Th
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import type { CitationStatus, Message, Source } from "@/api/types";
+import { AgentCharts } from "@/components/agent/AgentCharts";
+import { AgentRunCharts, AgentRunFooter, InspectLink } from "@/components/agent/AgentRunFooter";
+import { AgentSteps } from "@/components/agent/AgentSteps";
+import { AGENT_TEXT } from "@/components/agent/labels";
 import { CitedAnswer, SourceList } from "@/components/CitedAnswer";
 import { ErrorNote } from "@/components/common";
 import { Button } from "@/components/ui/button";
@@ -53,6 +57,24 @@ export default function Chat() {
     localStorage.setItem(LAST_SHELF_KEY, String(choice));
   };
   const [question, setQuestion] = useState("");
+  // Documents only (RAG) or the agent with tools (Phase 6), remembered per browser.
+  const [mode, setModeState] = useState<ChatMode>(() => {
+    try {
+      return localStorage.getItem(MODE_KEY) === "agent" ? "agent" : "docs";
+    } catch {
+      return "docs";
+    }
+  });
+  const setMode = (next: ChatMode) => {
+    setModeState(next);
+    try {
+      localStorage.setItem(MODE_KEY, next);
+    } catch {
+      // not remembered; still switches
+    }
+  };
+  const agent = mode === "agent";
+  const cannotAsk = !agent && (needsShelfChoice || shelves.length === 0);
 
   const onSession = useCallback((id: number) => navigate(`/chat/${id}`, { replace: true }), [navigate]);
   const { pending, ask, stop, reset, isStreaming } = useChatStream(onSession);
@@ -65,9 +87,10 @@ export default function Chat() {
 
   const submit = () => {
     const text = question.trim();
-    if (!text || isStreaming || needsShelfChoice || shelves.length === 0) return;
+    if (!text || isStreaming || cannotAsk) return;
     setQuestion("");
-    if (shelfId === ALL_SHELVES) ask(text, sessionId, undefined, { all_shelves: true });
+    if (agent) ask(text, sessionId, undefined, undefined, { agent: true });
+    else if (shelfId === ALL_SHELVES) ask(text, sessionId, undefined, { all_shelves: true });
     else ask(text, sessionId, shelfId);
   };
 
@@ -118,8 +141,13 @@ export default function Chat() {
       <section className="flex min-w-0 flex-1 flex-col">
         {/* The shelf decides what can be found; keep it in plain sight, not in the footer. */}
         <div className="border-b px-6 py-2">
-          <div className="mx-auto flex max-w-3xl items-center gap-2 text-sm">
-            {collections.isSuccess && shelves.length === 0 ? (
+          <div className="mx-auto flex max-w-3xl flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+            <ModeSwitch mode={mode} onChange={setMode} disabled={isStreaming} />
+            {agent ? (
+              <span className="text-xs text-muted-foreground">
+                Luna picks the tools: the portal's documents, the business database, the exchange rate and charts.
+              </span>
+            ) : collections.isSuccess && shelves.length === 0 ? (
               <span className="text-warning">
                 No shelves yet: <Link to="/library" className="underline">upload documents</Link> first.
               </span>
@@ -151,7 +179,7 @@ export default function Chat() {
         </div>
         <div className="flex-1 overflow-y-auto">
           <div className="mx-auto max-w-3xl space-y-6 px-6 py-8">
-            {messages.length === 0 && !pending && <Welcome />}
+            {messages.length === 0 && !pending && <Welcome agent={agent} />}
             <ErrorNote error={session.error} />
             {messages.map((m) => (
               <MessageView key={m.id} message={m} sessionId={sessionId} />
@@ -163,7 +191,18 @@ export default function Chat() {
                 <AssistantBubble
                   content={pending.answer}
                   sources={pending.sources}
-                  streaming={pending.status === "streaming"}
+                  streaming={pending.status === "streaming" && !pending.agent}
+                  steps={
+                    pending.agent && (
+                      <AgentSteps
+                        steps={pending.agent.steps}
+                        running={pending.status === "streaming"}
+                        hasAnswer={Boolean(pending.answer)}
+                        className="mb-2"
+                      />
+                    )
+                  }
+                  charts={pending.agent && <AgentCharts charts={pending.agent.charts} />}
                   idleText={
                     pending.status === "stopped"
                       ? "Stopped before the answer started."
@@ -172,9 +211,18 @@ export default function Chat() {
                         : undefined
                   }
                   footer={
-                    pending.status === "stopped" && (
-                      <p className="mt-2 text-xs text-muted-foreground">Stopped. The partial answer is saved.</p>
-                    )
+                    <>
+                      {pending.status === "stopped" && (
+                        <p className="mt-2 text-xs text-muted-foreground">
+                          {pending.agent ? AGENT_TEXT.stoppedAgent.en : "Stopped. The partial answer is saved."}
+                        </p>
+                      )}
+                      {pending.agent?.traceId != null && (
+                        <p className="mt-2 text-xs">
+                          <InspectLink traceId={pending.agent.traceId} />
+                        </p>
+                      )}
+                    </>
                   }
                 />
                 {pending.error && <ErrorNote error={pending.error} />}
@@ -191,7 +239,11 @@ export default function Chat() {
               <Textarea
                 rows={2}
                 value={question}
-                placeholder="Ask about your documents… (Enter to send, Shift+Enter for a new line)"
+                placeholder={
+                  agent
+                    ? "Ask about the documents, stock, sales or purchases… (Enter to send)"
+                    : "Ask about your documents… (Enter to send, Shift+Enter for a new line)"
+                }
                 onChange={(e) => setQuestion(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) {
@@ -211,14 +263,17 @@ export default function Chat() {
                   className="size-10"
                   title="Send"
                   onClick={submit}
-                  disabled={!question.trim() || needsShelfChoice || shelves.length === 0}
+                  disabled={!question.trim() || cannotAsk}
                 >
                   <Send />
                 </Button>
               )}
             </div>
             <p className="text-xs text-muted-foreground">
-              Answers use only your documents and cite them. Each question is answered on its own.
+              {agent
+                ? "Numbers come only from tool results; document facts cite their passage. Each run is traced."
+                : "Answers use only your documents and cite them."}{" "}
+              Each question is answered on its own.
             </p>
           </div>
         </div>
@@ -229,11 +284,52 @@ export default function Chat() {
 }
 
 const LAST_SHELF_KEY = "chat.lastShelf";
+const MODE_KEY = "chat.mode";
+type ChatMode = "docs" | "agent";
+
+function ModeSwitch({ mode, onChange, disabled }: { mode: ChatMode; onChange: (mode: ChatMode) => void; disabled: boolean }) {
+  return (
+    <div role="radiogroup" aria-label="Answer with" className="inline-flex rounded-md border p-0.5">
+      {(
+        [
+          ["docs", "Documents"],
+          ["agent", "Agent"],
+        ] as const
+      ).map(([value, label]) => (
+        <button
+          key={value}
+          type="button"
+          role="radio"
+          aria-checked={mode === value}
+          disabled={disabled}
+          onClick={() => onChange(value)}
+          className={cn(
+            "rounded px-2.5 py-1 text-xs font-medium disabled:opacity-50",
+            mode === value ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted",
+          )}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
 const ALL_SHELVES = "all";
 /** A shelf id, or every active shelf. */
 type ShelfChoice = number | typeof ALL_SHELVES;
 
-function Welcome() {
+function Welcome({ agent }: { agent: boolean }) {
+  if (agent) {
+    return (
+      <div className="py-16 text-center">
+        <h2 className="text-lg font-semibold">Ask Luna, with tools</h2>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Luna decides per question whether to search the documents, query the business database, get the exchange
+          rate or draw a chart, and shows each step. Every run can be opened in the agent inspector.
+        </p>
+      </div>
+    );
+  }
   return (
     <div className="py-16 text-center">
       <h2 className="text-lg font-semibold">Ask your documents</h2>
@@ -261,10 +357,15 @@ function AssistantBubble({
   streaming,
   idleText,
   footer,
+  steps,
+  charts,
 }: {
   content: string;
   sources: Source[];
   streaming?: boolean;
+  /** Agent runs: the live tool steps, shown above the answer (they replace the spinner). */
+  steps?: ReactNode;
+  charts?: ReactNode;
   /** Shown instead of the spinner when there is no answer and none is coming. */
   idleText?: string;
   footer?: ReactNode;
@@ -273,17 +374,19 @@ function AssistantBubble({
   const toggle = (rank: number) => setHighlighted((h) => (h === rank ? null : rank));
   return (
     <div className="max-w-[92%] rounded-2xl rounded-bl-sm border bg-muted/30 px-4 py-3">
+      {steps}
       {content ? (
         <CitedAnswer content={content} sources={sources} highlighted={highlighted} onCite={toggle} />
       ) : idleText ? (
         <p className="text-sm text-muted-foreground">{idleText}</p>
-      ) : (
+      ) : steps ? null : (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="size-4 animate-spin" />
           {sources.length ? "Writing the answer…" : "Searching your documents…"}
         </div>
       )}
       {streaming && content && <span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse bg-foreground/60 align-middle" />}
+      {charts}
       <SourceList sources={sources} highlighted={highlighted} onSelect={toggle} />
       {footer}
     </div>
@@ -298,8 +401,10 @@ function MessageView({ message, sessionId }: { message: Message; sessionId: numb
     <AssistantBubble
       content={message.content}
       sources={message.sources}
+      charts={message.agent_trace_id != null && <AgentRunCharts traceId={message.agent_trace_id} />}
       footer={
         <>
+        {message.agent_trace_id != null && <AgentRunFooter traceId={message.agent_trace_id} charts={false} />}
         <CitationWarning status={message.citation_status} />
         <div className="mt-2 flex items-center gap-1 text-xs text-muted-foreground">
           <Button
