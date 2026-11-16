@@ -5,6 +5,7 @@ Usage:
     python -m app.cli ask "<question>"
     python -m app.cli seed-demo [path]
     python -m app.cli seed-business-db [path]
+    python -m app.cli agent "<question>" [--json]
     python -m app.cli eval [--set NAME] [--mode hybrid|vector|keyword] [--answers] [--judge]
     python -m app.cli eval-compare <run a> <run b>
     python -m app.cli set-password [--stdin]
@@ -12,6 +13,7 @@ Usage:
 """
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -121,6 +123,75 @@ def cmd_seed_business_db(args: argparse.Namespace) -> int:
     for sku in ("CH-2004", "GB-1014"):
         print(f"  {sku}    {summary.q3_units[sku]:,} units")
     return 0
+
+
+def _short(text: str, limit: int = 300) -> str:
+    text = " ".join(text.split())
+    return text if len(text) <= limit else text[: limit - 3] + "..."
+
+
+def _print_step(step) -> None:
+    from app.agent.trace import LLMStep
+
+    if isinstance(step, LLMStep):
+        tokens = f"{step.prompt_tokens}+{step.completion_tokens} tokens"
+        if step.tool_calls:
+            calls = ", ".join(
+                f"{c['name']} {json.dumps(c['arguments'], ensure_ascii=False)}"
+                for c in step.tool_calls
+            )
+            note = " (written as text)" if step.parsed_from_content else ""
+            what = f"calls {calls}{note}"
+        else:
+            what = "answers" if step.tools_offered else "answers (no tools offered)"
+        print(f"[{step.iteration}] model {step.ms} ms, {tokens}: {what}", flush=True)
+    else:
+        state = "ok" if step.ok else "error"
+        timing = "reused" if step.reused else f"{step.ms} ms"
+        print(f"[{step.iteration}] tool  {step.name} {state}, {timing}: {_short(step.result)}")
+
+
+def cmd_agent(args: argparse.Namespace) -> int:
+    """Asks Luna a question with tools; every step is printed and the trace stored."""
+    from app.agent.loop import AgentLimits, run_agent
+    from app.agent.registry import ToolContext
+    from app.agent.tools import build_registry
+    from app.versioning.agent_traces import save_trace
+
+    runtime = build_runtime(get_settings())
+    settings = runtime.settings
+    question = " ".join(args.question)
+    model = settings.agent_chat_model
+    if not settings.business_db_file.is_file():
+        print(
+            f"note: no business database at {settings.business_db_file}; "
+            "create it with: python -m app.cli seed-business-db",
+            file=sys.stderr,
+        )
+
+    trace = run_agent(
+        question,
+        llm=runtime.llm_client_for(model),
+        registry=build_registry(),
+        ctx=ToolContext(settings),
+        limits=AgentLimits.from_settings(settings),
+        model=model,
+        on_step=None if args.json else _print_step,
+    )
+    with runtime.session_factory() as db:
+        save_trace(db, trace)
+
+    if args.json:
+        print(json.dumps(trace.to_dict(), ensure_ascii=False, indent=2))
+    else:
+        print()
+        print(trace.answer if trace.status != "llm_error" else f"The model failed: {trace.error}")
+        print()
+        print(
+            f"trace #{trace.id}: {trace.status}, {trace.iterations} model calls, "
+            f"{trace.total_tokens} tokens, {trace.duration_ms / 1000:.1f} s ({model})"
+        )
+    return 1 if trace.status == "llm_error" else 0
 
 
 def cmd_backup(args: argparse.Namespace) -> int:
@@ -383,6 +454,13 @@ def main(argv: list[str] | None = None) -> int:
         "path", nargs="?", help="Database file (default: BUSINESS_DB_PATH or DATA_DIR/business)"
     )
     business_parser.set_defaults(func=cmd_seed_business_db)
+
+    agent_parser = subparsers.add_parser(
+        "agent", help="Ask Luna with tools (business database); prints every step"
+    )
+    agent_parser.add_argument("question", nargs="+", help="The question to ask")
+    agent_parser.add_argument("--json", action="store_true", help="Print the whole trace as JSON")
+    agent_parser.set_defaults(func=cmd_agent)
 
     backup_parser = subparsers.add_parser("backup", help="Back up the data (app stopped)")
     backup_parser.add_argument("--force", action="store_true", help="even if the app seems to run")
