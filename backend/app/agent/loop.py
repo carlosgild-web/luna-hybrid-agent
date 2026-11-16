@@ -71,7 +71,8 @@ convert) instead of doing the arithmetic. If its source is "stored", say that th
 the one stored in the company's books, not today's market rate."""
 CHART_RULE = """
 - Call make_chart only when the user asks for a chart or a graph, after the tool that has \
-the numbers, and copy its values exactly."""
+the numbers, and copy its values exactly. Never write a chart as JSON, code or a table \
+in your answer: only make_chart draws charts."""
 
 FINAL_CALL = (
     "Stop calling tools now. Answer the question with the tool results above. If they "

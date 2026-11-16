@@ -122,6 +122,10 @@ export const UI = {
       es: "Hola, soy Luna. Busco respuestas en los documentos internos de Hilda & Luna y siempre te digo de dónde salen.",
       en: "Hi, I'm Luna. I look for answers in Hilda & Luna's internal documents and always show you where they come from.",
     },
+    welcomeAgent: {
+      es: "Hola, soy Luna. Busco en los documentos internos y en los datos del negocio (inventario, ventas, compras), y te muestro cada paso que doy.",
+      en: "Hi, I'm Luna. I look in the internal documents and the business data (stock, sales, purchases), and I show you every step I take.",
+    },
     notFoundTitle: {
       es: "No encontré esto en los documentos de la empresa.",
       en: "I couldn't find this in the company documents.",

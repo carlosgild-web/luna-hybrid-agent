@@ -2,12 +2,21 @@
 audit row (invariant 7) naming its status and the tools it called, and one
 `external_call` audit row for every request a tool sent outside the machine
 (invariant 10, decision 0037): the tools describe those in their step's
-`meta["external_call"]` and never write to the database themselves."""
+`meta["external_call"]` and never write to the database themselves.
+
+An agent chat answer (Phase 6) is saved with `save_agent_answer`: the trace, then the
+assistant message pointing to it, with every passage `search_documents` showed as its
+sources (invariant 5). A source's rank is the passage number the answer cites, so "[3]"
+is the source of rank 3, as in a RAG answer.
+"""
 
 from sqlalchemy.orm import Session
 
+from app.agent.answer import shown_passages
 from app.agent.trace import AgentTrace, ToolStep
-from app.db.models import AgentTraceRecord
+from app.db.models import AgentTraceRecord, Message
+from app.versioning import history
+from app.versioning.history import SourceRef
 from app.versioning.service import NotFoundError, record_audit
 
 
@@ -43,6 +52,26 @@ def save_trace(db: Session, trace: AgentTrace) -> AgentTraceRecord:
     db.commit()
     trace.id = row.id
     return row
+
+
+def save_agent_answer(
+    db: Session, session_id: int, trace: AgentTrace
+) -> tuple[AgentTraceRecord, Message]:
+    """Stores the run and the assistant message that shows its answer."""
+    record = save_trace(db, trace)
+    passages = shown_passages(trace)
+    message = history.add_message(
+        db,
+        session_id,
+        "assistant",
+        trace.answer,
+        sources=[
+            SourceRef(chunk_id=p["chunk_id"], rank=number, score=p["score"])
+            for number, p in sorted(passages.items())
+        ],
+        agent_trace_id=record.id,
+    )
+    return record, message
 
 
 def get_trace(db: Session, trace_id: int) -> AgentTraceRecord:

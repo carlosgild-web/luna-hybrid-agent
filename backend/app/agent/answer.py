@@ -25,18 +25,21 @@ citation markers are not numbers. ISO dates are compared as text.
 import datetime as dt
 import json
 import re
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from dataclasses import asdict, dataclass, field
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Any
 
 from app.agent.trace import AgentTrace, ToolStep
-from app.retrieval.citations import INVALID, MISSING, NOT_APPLICABLE, OK, cited_numbers
+from app.retrieval.citations import INVALID, MISSING, NOT_APPLICABLE, OK
 
 DOCUMENTS_TOOL = "search_documents"
 CHART_TOOL = "make_chart"
 
 _CITATION = re.compile(r"\[\d+(?:\s*,\s*\d+)*\]")
+# A bracket of bigger numbers that aren't passages is data, e.g. a JSON array the model
+# wrote ("[1200, 1500, 1420]"): its numbers are claims, not citations (decision 0039).
+_MAX_CITATION_DIGITS = 2
 _LIST_MARKER = re.compile(r"(?m)^\s*\d+[.)]\s+")
 _ISO_DATE = re.compile(r"\b\d{4}-\d{2}-\d{2}\b")
 _SEPARATOR = "[.,  ]"  # thousands or decimal; no-break spaces from "4 120"
@@ -83,7 +86,7 @@ def check_answer(trace: AgentTrace, today: dt.date | None = None) -> AnswerCheck
     evidence = _evidence(trace, today or trace.started_at.date())
     numbers = [
         NumberClaim(text, [label for label, ev in evidence if ev.supports(text, values)])
-        for text, values in _claims(trace.answer)
+        for text, values in _claims(trace.answer, passages)
     ]
     return AnswerCheck(status, cited, sources, numbers, _charts(trace))
 
@@ -132,7 +135,7 @@ def _document_steps(trace: AgentTrace) -> Iterator[ToolStep]:
 
 
 def _citations(answer: str, passages: dict[int, dict[str, Any]]) -> tuple[str, list[int]]:
-    cited = list(dict.fromkeys(cited_numbers(answer)))  # first-cited order, no repeats
+    cited = list(dict.fromkeys(_cited_numbers(answer, passages)))  # first-cited order, no repeats
     if not cited:
         return (MISSING if passages and answer.strip() else NOT_APPLICABLE), []
     if any(n not in passages for n in cited):
@@ -143,10 +146,27 @@ def _citations(answer: str, passages: dict[int, dict[str, Any]]) -> tuple[str, l
 # ------------------------------------------------------------------ numbers
 
 
-def _claims(answer: str) -> list[tuple[str, set[Decimal]]]:
+def _is_citation(group: str, passages: Mapping[int, Any]) -> bool:
+    numbers = _DIGITS.findall(group)
+    return all(int(n) in passages or len(n) <= _MAX_CITATION_DIGITS for n in numbers)
+
+
+def _cited_numbers(answer: str, passages: Mapping[int, Any]) -> list[int]:
+    return [
+        int(n)
+        for match in _CITATION.finditer(answer)
+        if _is_citation(match.group(0), passages)
+        for n in _DIGITS.findall(match.group(0))
+    ]
+
+
+def _claims(answer: str, passages: Mapping[int, Any]) -> list[tuple[str, set[Decimal]]]:
     """The numbers the answer states, each with every value it can mean. A date
     claim has no values: it's matched as text."""
-    text = _LIST_MARKER.sub("", _CITATION.sub(" ", answer))
+    without_citations = _CITATION.sub(
+        lambda m: " " if _is_citation(m.group(0), passages) else m.group(0), answer
+    )
+    text = _LIST_MARKER.sub("", without_citations)
     claims: list[tuple[str, set[Decimal]]] = []
     for date in _ISO_DATE.findall(text):
         claims.append((date, set()))

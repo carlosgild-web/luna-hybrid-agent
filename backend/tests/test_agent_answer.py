@@ -182,3 +182,22 @@ def test_to_dict_lists_the_unsupported_numbers():
     data = check("Stock is 7.", tool("check_inventory", INVENTORY)).to_dict()
     assert data["unsupported_numbers"] == ["7"]
     assert data["numbers"] == [{"text": "7", "sources": []}]
+
+
+def test_a_data_array_in_the_answer_is_checked_not_read_as_a_citation():
+    """Phase 6 acceptance run: the model wrote a chart spec into its answer with made-up
+    monthly values. "[1200, 1500, 1420]" is data, so it is no citation, and its numbers
+    are traced like any other (decision 0039)."""
+    answer = (
+        'The notes say 4,120 units [1].\n```json\n{"series": {"Units": [1200, 1500, 1420]}}\n```'
+    )
+    result = check(answer, tool("sales_report", SALES), documents((1, NOTES)))
+    assert result.citation_status == "ok"
+    assert result.cited == [1]
+    assert result.unsupported == ["1200", "1500", "1420"]
+
+
+def test_a_small_wrong_citation_is_still_a_citation():
+    result = check("Stock is low [7].", tool("check_inventory", INVENTORY), documents((1, NOTES)))
+    assert result.citation_status == "invalid"
+    assert result.unsupported == []

@@ -2,7 +2,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/api/client";
 import { postEventStream } from "@/api/sse";
-import type { Message, Source } from "@/api/types";
+import type { AgentChatEvent, AgentStepEvent, ChartSpec, ChatEvent, Message, Source } from "@/api/types";
 import { keys } from "./queries";
 
 export interface PendingAnswer {
@@ -11,10 +11,19 @@ export interface PendingAnswer {
   sources: Source[];
   status: "streaming" | "stopped" | "error";
   error?: string;
+  /** Set when the question went to the agent (Phase 6). */
+  agent?: PendingAgentRun;
+}
+
+export interface PendingAgentRun {
+  steps: AgentStepEvent[];
+  charts: ChartSpec[];
+  traceId: number | null;
 }
 
 /**
- * Sends one question to POST /api/chat and accumulates the streamed answer.
+ * Sends one question to POST /api/chat (or, with `agent`, POST /api/agent/chat)
+ * and accumulates the streamed answer; an agent run also collects its steps.
  * When the stream ends the session is refetched and the saved messages
  * replace the pending answer. After Stop, the partial answer stays on
  * screen until the server has saved it (it saves on disconnect).
@@ -33,17 +42,28 @@ export function useChatStream(onSession: (id: number) => void) {
       sessionId: number | null,
       collectionId?: number,
       extra?: Record<string, unknown>,
+      options?: { agent?: boolean },
     ) => {
       controller.current?.abort();
       const abort = new AbortController();
       controller.current = abort;
-      setPending({ question, answer: "", sources: [], status: "streaming" });
+      const agent = options?.agent ?? false;
+      setPending({
+        question,
+        answer: "",
+        sources: [],
+        status: "streaming",
+        agent: agent ? { steps: [], charts: [], traceId: null } : undefined,
+      });
 
       let session = sessionId;
       sessionRef.current = sessionId;
       try {
-        const body = { question, session_id: sessionId, collection_id: collectionId ?? null, ...extra };
-        for await (const message of postEventStream("/chat", body, abort.signal)) {
+        const body = agent
+          ? { question, session_id: sessionId, ...extra }
+          : { question, session_id: sessionId, collection_id: collectionId ?? null, ...extra };
+        const path = agent ? "/agent/chat" : "/chat";
+        for await (const message of postEventStream<ChatEvent | AgentChatEvent>(path, body, abort.signal)) {
           switch (message.event) {
             case "session":
               session = message.data.session_id;
@@ -56,6 +76,18 @@ export function useChatStream(onSession: (id: number) => void) {
             case "token":
               setPending((p) => p && { ...p, answer: p.answer + message.data.text });
               break;
+            case "step": {
+              const step = message.data;
+              setPending((p) => p?.agent ? { ...p, agent: { ...p.agent, steps: [...p.agent.steps, step] } } : p);
+              break;
+            }
+            case "answer": {
+              const { text, sources, charts, trace_id } = message.data;
+              setPending(
+                (p) => p && { ...p, answer: text, sources, agent: { steps: p.agent?.steps ?? [], charts, traceId: trace_id } },
+              );
+              break;
+            }
             case "error":
               throw new Error(message.data.detail);
             case "done":

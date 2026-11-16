@@ -396,6 +396,8 @@ export interface Message {
   sources: Source[];
   feedback: Feedback | null;
   citation_status: CitationStatus | null;
+  /** Agent answers: the stored run behind this message (Phase 6). */
+  agent_trace_id?: number | null;
 }
 
 /** ok: every [n] points at a source; missing: no citation; invalid: a
@@ -578,6 +580,141 @@ export type ChatEvent =
       data: { message_id: number; rag_profile_id: number; not_found: boolean; citation_status: CitationStatus };
     }
   | { event: "error"; data: { detail: string } };
+
+// --- Agent (PLAN_HYBRID.md Phase 6, decision 0039) ---------------------------
+
+export interface AgentToolCall {
+  name: string;
+  arguments: Record<string, unknown>;
+}
+
+/** One step as POST /api/agent/chat streams it: no tool results. */
+export type AgentStepEvent =
+  | {
+      kind: "llm";
+      iteration: number;
+      tool_calls: AgentToolCall[];
+      answered: boolean;
+      prompt_tokens: number;
+      completion_tokens: number;
+      ms: number;
+    }
+  | {
+      kind: "tool";
+      iteration: number;
+      name: string;
+      arguments: Record<string, unknown>;
+      ok: boolean;
+      reused: boolean;
+      ms: number;
+      chart_id?: string;
+    };
+
+export type ChartRow = { label: string } & Record<string, number | string>;
+
+/** A chart `make_chart` stored in a trace (decision 0038), as recharts reads it. */
+export interface ChartSpec {
+  id: string;
+  kind: "line" | "bar" | "pie";
+  title: string;
+  y_label: string | null;
+  series: string[];
+  data: ChartRow[];
+}
+
+export interface AgentNumberClaim {
+  text: string;
+  sources: string[];
+}
+
+/** The answer check (decision 0036). */
+export interface AgentChecks {
+  citation_status: CitationStatus;
+  cited: number[];
+  sources: AgentPassage[];
+  numbers: AgentNumberClaim[];
+  unsupported_numbers: string[];
+  charts: { chart_id: string; values: number; unsupported_values: (number | string)[] }[];
+}
+
+/** A passage search_documents showed, from the tool step's meta. */
+export interface AgentPassage {
+  number: number;
+  chunk_id: number;
+  document_id: number;
+  version_id: number;
+  filename: string;
+  page: number | null;
+  heading: string | null;
+  score: number;
+}
+
+export type AgentStatus = "answered" | "max_iterations" | "token_budget" | "tool_errors" | "llm_error";
+
+export interface AgentAnswer {
+  text: string;
+  status: AgentStatus;
+  trace_id: number;
+  message_id: number;
+  sources: Source[];
+  checks: AgentChecks | null;
+  charts: ChartSpec[];
+}
+
+/** A stored step, as GET /api/agent/traces/{id} returns it (invariant 11). */
+export type AgentTraceStep =
+  | {
+      kind: "llm";
+      iteration: number;
+      content: string;
+      tool_calls: AgentToolCall[];
+      prompt_tokens: number;
+      completion_tokens: number;
+      ms: number;
+      tools_offered: boolean;
+      parsed_from_content: boolean;
+    }
+  | {
+      kind: "tool";
+      iteration: number;
+      name: string;
+      arguments: Record<string, unknown>;
+      ok: boolean;
+      result: string;
+      ms: number;
+      reused: boolean;
+      meta: {
+        passages?: AgentPassage[];
+        chart?: ChartSpec;
+        external_call?: Record<string, unknown>;
+        [key: string]: unknown;
+      };
+    };
+
+export interface AgentTrace {
+  id: number;
+  question: string;
+  model: string;
+  status: AgentStatus;
+  answer: string;
+  error: string | null;
+  iterations: number;
+  prompt_tokens: number;
+  completion_tokens: number;
+  duration_ms: number;
+  created_at: string;
+  checks: AgentChecks | null;
+  steps: AgentTraceStep[];
+  charts: ChartSpec[];
+}
+
+// Server-sent events of POST /api/agent/chat, in order.
+export type AgentChatEvent =
+  | { event: "session"; data: { session_id: number; user_message_id: number } }
+  | { event: "step"; data: AgentStepEvent }
+  | { event: "answer"; data: AgentAnswer }
+  | { event: "done"; data: { message_id: number; trace_id: number; status: AgentStatus } }
+  | { event: "error"; data: { detail: string; trace_id?: number | null } };
 
 // --- Evaluation (decision 0019) ---------------------------------------------
 

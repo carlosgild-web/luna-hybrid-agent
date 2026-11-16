@@ -1,12 +1,16 @@
 import { ChevronDown, FileText, Loader2, RotateCcw, SendHorizontal, Square, ThumbsDown, ThumbsUp } from "lucide-react";
 import { type FormEvent, type KeyboardEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import type { Message, Source } from "@/api/types";
+import { AgentCharts } from "@/components/agent/AgentCharts";
+import { AgentRunCharts, AgentRunFooter, InspectLink } from "@/components/agent/AgentRunFooter";
+import { AgentSteps } from "@/components/agent/AgentSteps";
+import { AGENT_TEXT } from "@/components/agent/labels";
 import { CitedAnswer } from "@/components/CitedAnswer";
 import { useChunk, useFeedback } from "@/hooks/queries";
 import { endsWithQuestion } from "@/hooks/useChatStream";
 import { cn } from "@/lib/utils";
-import { SUGGESTIONS } from "./content";
-import { UI, useT } from "./i18n";
+import { AGENT_SUGGESTIONS, SUGGESTIONS } from "./content";
+import { UI, useLang, useT } from "./i18n";
 import { LogoMark } from "./Logo";
 import { documentTitle, isNotFound, sourceKey, useLuna } from "./luna";
 
@@ -15,6 +19,7 @@ type Variant = "page" | "panel";
 /** The conversation with Luna: messages, the streaming answer, and the composer. */
 export function LunaChat({ variant, autoFocus = false }: { variant: Variant; autoFocus?: boolean }) {
   const t = useT();
+  const { lang } = useLang();
   const luna = useLuna();
   const scroller = useRef<HTMLDivElement>(null);
   const messages = luna.session?.messages ?? [];
@@ -22,7 +27,7 @@ export function LunaChat({ variant, autoFocus = false }: { variant: Variant; aut
   const empty = messages.length === 0 && !pending && !luna.sessionLoading;
 
   // Follow the answer as it streams in.
-  const tokenCount = pending?.answer.length ?? 0;
+  const tokenCount = (pending?.answer.length ?? 0) + (pending?.agent?.steps.length ?? 0);
   useEffect(() => {
     const el = scroller.current;
     if (el) el.scrollTop = el.scrollHeight;
@@ -50,10 +55,28 @@ export function LunaChat({ variant, autoFocus = false }: { variant: Variant; aut
               <Answer
                 content={pending.answer}
                 sources={pending.sources}
-                streaming={pending.status === "streaming"}
+                streaming={pending.status === "streaming" && !pending.agent}
+                steps={
+                  pending.agent && (
+                    <AgentSteps
+                      steps={pending.agent.steps}
+                      running={pending.status === "streaming"}
+                      hasAnswer={Boolean(pending.answer)}
+                      lang={lang}
+                      className="mb-2 text-hl-ink"
+                    />
+                  )
+                }
+                charts={pending.agent && <AgentCharts charts={pending.agent.charts} lang={lang} />}
                 footer={
                   pending.status === "stopped" ? (
-                    <p className="text-xs text-hl-muted">{t(UI.luna.stopped)}</p>
+                    <p className="text-xs text-hl-muted">
+                      {pending.agent ? AGENT_TEXT.stoppedAgent[lang] : t(UI.luna.stopped)}
+                    </p>
+                  ) : pending.agent?.traceId != null ? (
+                    <p className="text-xs text-hl-cobalt">
+                      <InspectLink traceId={pending.agent.traceId} lang={lang} newTab />
+                    </p>
                   ) : pending.status === "error" ? (
                     <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
                       <p className="font-semibold">{t(UI.luna.error)}</p>
@@ -81,12 +104,13 @@ export function LunaChat({ variant, autoFocus = false }: { variant: Variant; aut
 function Welcome({ variant }: { variant: Variant }) {
   const t = useT();
   const luna = useLuna();
+  const agent = luna.mode === "agent";
   return (
     <div className={cn("flex flex-col gap-4", variant === "page" ? "pt-6" : "pt-1")}>
       <div className="flex items-start gap-3">
         <Avatar />
         <p className="rounded-2xl rounded-tl-sm bg-hl-card px-4 py-3 text-[0.95rem] leading-relaxed shadow-sm ring-1 ring-hl-line">
-          {t(UI.luna.welcome)}
+          {t(agent ? UI.luna.welcomeAgent : UI.luna.welcome)}
         </p>
       </div>
       <div className="pl-12">
@@ -94,7 +118,7 @@ function Welcome({ variant }: { variant: Variant }) {
           {t(UI.luna.suggestions)}
         </p>
         <ul className="flex flex-wrap gap-2">
-          {SUGGESTIONS.map((s) => (
+          {(agent ? AGENT_SUGGESTIONS : SUGGESTIONS).map((s) => (
             <li key={s.en}>
               <button
                 type="button"
@@ -130,12 +154,24 @@ function Question({ text }: { text: string }) {
 }
 
 function SavedAnswer({ message, sessionId }: { message: Message; sessionId: number | null }) {
+  const { lang } = useLang();
+  const traceId = message.agent_trace_id;
   return (
     <Answer
       content={message.content}
       sources={message.sources}
       streaming={false}
-      footer={<Feedback message={message} sessionId={sessionId} />}
+      charts={traceId != null && <AgentRunCharts traceId={traceId} lang={lang} />}
+      footer={
+        <>
+          {traceId != null && (
+            <div className="mb-2 text-hl-cobalt">
+              <AgentRunFooter traceId={traceId} lang={lang} newTab charts={false} />
+            </div>
+          )}
+          <Feedback message={message} sessionId={sessionId} />
+        </>
+      }
     />
   );
 }
@@ -145,11 +181,16 @@ function Answer({
   sources,
   streaming,
   footer,
+  steps,
+  charts,
 }: {
   content: string;
   sources: Source[];
   streaming: boolean;
   footer?: ReactNode;
+  /** Agent runs: the live tool steps (they replace the "thinking" line). */
+  steps?: ReactNode;
+  charts?: ReactNode;
 }) {
   const t = useT();
   const [open, setOpen] = useState<number | null>(null);
@@ -159,6 +200,7 @@ function Answer({
     <div className="flex items-start gap-3">
       <Avatar />
       <div className="min-w-0 flex-1 rounded-2xl rounded-tl-sm bg-hl-card px-4 py-3 shadow-sm ring-1 ring-hl-line">
+        {steps}
         {notFound ? (
           <div>
             <p className="font-semibold">{t(UI.luna.notFoundTitle)}</p>
@@ -171,12 +213,13 @@ function Answer({
             highlighted={open}
             onCite={(rank) => setOpen((r) => (r === rank ? null : rank))}
           />
-        ) : (
+        ) : steps ? null : (
           <p className="flex items-center gap-2 text-sm text-hl-muted">
             <Loader2 className="size-4 animate-spin" /> {t(UI.luna.thinking)}
           </p>
         )}
         {streaming && content && <span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse bg-hl-cobalt align-middle" />}
+        {charts}
 
         {!notFound && sources.length > 0 && (
           <Sources sources={sources} open={open} onToggle={(rank) => setOpen((r) => (r === rank ? null : rank))} />
@@ -341,6 +384,7 @@ function Composer({ variant, autoFocus }: { variant: Variant; autoFocus: boolean
       className={cn("border-t border-hl-line bg-hl-card", variant === "page" ? "px-1 pb-2 pt-3" : "px-3 pb-3 pt-3")}
     >
       <div className={cn("mx-auto", variant === "page" && "max-w-3xl")}>
+        <ModeSwitch />
         <div className="flex items-end gap-2 rounded-2xl bg-hl-paper p-1.5 ring-1 ring-hl-line focus-within:ring-2 focus-within:ring-hl-cobalt">
           <label htmlFor={`luna-input-${variant}`} className="sr-only">
             {t(UI.luna.placeholder)}
@@ -381,5 +425,38 @@ function Composer({ variant, autoFocus }: { variant: Variant; autoFocus: boolean
         <p className="mt-1.5 px-2 text-[11px] text-hl-muted">{t(UI.luna.disclaimer)}</p>
       </div>
     </form>
+  );
+}
+
+/** Documents only, or documents plus the business data (the agent). */
+function ModeSwitch() {
+  const { lang } = useLang();
+  const luna = useLuna();
+  const options = [
+    { value: "agent", label: AGENT_TEXT.modeAgent[lang] },
+    { value: "docs", label: AGENT_TEXT.modeDocs[lang] },
+  ] as const;
+  return (
+    <div className="mb-2 flex flex-wrap items-center gap-2 px-1 text-xs text-hl-muted">
+      <span>{AGENT_TEXT.mode[lang]}</span>
+      <div role="radiogroup" aria-label={AGENT_TEXT.mode[lang]} className="inline-flex rounded-full bg-hl-paper p-0.5 ring-1 ring-hl-line">
+        {options.map((o) => (
+          <button
+            key={o.value}
+            type="button"
+            role="radio"
+            aria-checked={luna.mode === o.value}
+            disabled={luna.isStreaming}
+            onClick={() => luna.setMode(o.value)}
+            className={cn(
+              "rounded-full px-3 py-1 font-medium transition-colors disabled:opacity-50",
+              luna.mode === o.value ? "bg-hl-cobalt text-white" : "hover:text-hl-ink",
+            )}
+          >
+            {o.label}
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
