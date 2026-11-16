@@ -47,6 +47,8 @@ services:
       WEB_CONCURRENCY: "1"
       # Optional password for the console, the intranet and the API (decision 0026).
       APP_PASSWORD: ${APP_PASSWORD:-}
+      # Luna's fx_rate tool may fetch live rates only when this is true (decision 0037).
+      ALLOW_EXTERNAL_APIS: ${ALLOW_EXTERNAL_APIS:-false}
     volumes:
       - app_data:/data
       # Watched folders (decision 0025): add /watch on the Watched folders page and

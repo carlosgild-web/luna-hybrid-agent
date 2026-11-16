@@ -52,6 +52,14 @@ class Settings(BaseSettings):
     agent_token_budget: int = Field(32_000, ge=1)  # prompt + completion tokens per question
     agent_temperature: float = 0.0
 
+    # External APIs (agent invariant 10, decision 0037). Off: fx_rate answers with the
+    # rate stored in the business database and says so. On: it asks FX_API_URL, a
+    # frankfurter.dev v2 API (no key), and falls back to the stored rate on failure.
+    allow_external_apis: bool = False
+    fx_api_url: str = "https://api.frankfurter.dev/v2"
+    fx_timeout_s: float = Field(5.0, gt=0)
+    fx_cache_ttl_s: float = Field(3600.0, ge=0)  # how long today's live rate is reused
+
     # OCR fallback for low-text-yield PDF pages
     ocr_lang: str = "eng+spa"
     ocr_min_text_chars: int = 20

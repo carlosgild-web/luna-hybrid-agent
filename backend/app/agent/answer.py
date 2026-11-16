@@ -11,6 +11,9 @@ Two checks, both read from the trace alone, so any stored run can be checked aga
   question, or today's date. A number nothing contains is `unsupported`: the model
   made it up or did its own arithmetic. So the answer doesn't have to name its tools;
   the check names them (decision 0036).
+- **Charts** (invariant 12, decision 0038). Every value in a `make_chart` chart must
+  appear in a tool result shown before the chart was made; the ones that don't are
+  listed per chart. A chart's own step is never evidence for anything.
 
 The check reports and changes nothing. A small model writes numbers as "4,120",
 "4.120" (Spanish), "519,725.51", "59,8 %"; each is read every way it can mean and
@@ -31,6 +34,7 @@ from app.agent.trace import AgentTrace, ToolStep
 from app.retrieval.citations import INVALID, MISSING, NOT_APPLICABLE, OK, cited_numbers
 
 DOCUMENTS_TOOL = "search_documents"
+CHART_TOOL = "make_chart"
 
 _CITATION = re.compile(r"\[\d+(?:\s*,\s*\d+)*\]")
 _LIST_MARKER = re.compile(r"(?m)^\s*\d+[.)]\s+")
@@ -55,6 +59,7 @@ class AnswerCheck:
     cited: list[int]
     sources: list[dict[str, Any]]  # the cited passages: document, page, chunk
     numbers: list[NumberClaim]
+    charts: list[dict[str, Any]] = field(default_factory=list)  # id, values, unsupported
 
     @property
     def unsupported(self) -> list[str]:
@@ -67,6 +72,7 @@ class AnswerCheck:
             "sources": self.sources,
             "numbers": [asdict(claim) for claim in self.numbers],
             "unsupported_numbers": self.unsupported,
+            "charts": self.charts,
         }
 
 
@@ -79,7 +85,35 @@ def check_answer(trace: AgentTrace, today: dt.date | None = None) -> AnswerCheck
         NumberClaim(text, [label for label, ev in evidence if ev.supports(text, values)])
         for text, values in _claims(trace.answer)
     ]
-    return AnswerCheck(status, cited, sources, numbers)
+    return AnswerCheck(status, cited, sources, numbers, _charts(trace))
+
+
+def _charts(trace: AgentTrace) -> list[dict[str, Any]]:
+    """Each chart made in the run, with the values no earlier tool result contains."""
+    charts: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for index, step in enumerate(trace.steps):
+        chart = step.meta.get("chart") if isinstance(step, ToolStep) and step.ok else None
+        if not chart or chart["id"] in seen:
+            continue
+        seen.add(chart["id"])
+        evidence = [ev for _, ev in _evidence(trace, None, until=index)]
+        values = [row[name] for row in chart["data"] for name in chart["series"]]
+        unsupported = [
+            value
+            for value in values
+            if not any(ev.supports(str(value), {_decimal(value)}) for ev in evidence)
+        ]
+        charts.append(
+            {"chart_id": chart["id"], "values": len(values), "unsupported_values": unsupported}
+        )
+    return charts
+
+
+def _decimal(value: float | int) -> Decimal:
+    """A chart value as written: 519725.51 keeps two decimals, 4120.0 none."""
+    number = Decimal(str(value))
+    return number.to_integral_value() if number == number.to_integral_value() else number
 
 
 def shown_passages(trace: AgentTrace) -> dict[int, dict[str, Any]]:
@@ -168,11 +202,15 @@ def _rounds_to(value: Decimal, reading: Decimal) -> bool:
         return False
 
 
-def _evidence(trace: AgentTrace, today: dt.date) -> list[tuple[str, _Evidence]]:
-    """(label, evidence) for everything a number may come from, in trace order."""
+def _evidence(
+    trace: AgentTrace, today: dt.date | None, *, until: int | None = None
+) -> list[tuple[str, _Evidence]]:
+    """(label, evidence) for everything a number may come from, in trace order:
+    the question, the tool results (the steps before `until`, if given; never a
+    chart's), and `today` when given."""
     evidence: list[tuple[str, _Evidence]] = [("question", _from_text(trace.question))]
-    for step in trace.steps:
-        if not isinstance(step, ToolStep) or not step.ok:
+    for step in trace.steps[:until]:
+        if not isinstance(step, ToolStep) or not step.ok or step.name == CHART_TOOL:
             continue
         try:
             shown = json.loads(step.result)
@@ -184,7 +222,8 @@ def _evidence(trace: AgentTrace, today: dt.date) -> list[tuple[str, _Evidence]]:
                 evidence.append((label, _from_text(str(passage.get("text", "")))))
         else:
             evidence.append((step.name, _from_json(shown, step.result)))
-    evidence.append(("today", _from_text(today.isoformat())))
+    if today is not None:
+        evidence.append(("today", _from_text(today.isoformat())))
 
     merged: dict[str, _Evidence] = {}  # the same tool called twice is one source
     for label, ev in evidence:
