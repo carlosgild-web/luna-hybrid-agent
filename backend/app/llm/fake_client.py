@@ -1,18 +1,31 @@
 """Deterministic fake LLMClient / EmbeddingClient for tests, no Ollama needed."""
 
+import copy
 import hashlib
 import math
 from collections.abc import Iterator
+from typing import Any
 
-from app.llm.base import EmbeddingClient, LLMClient
+from app.llm.base import ChatTurn, EmbeddingClient, LLMClient
 
 
 class FakeLLMClient(LLMClient):
-    """Returns a canned response, or echoes the prompt if none is queued."""
+    """Returns a canned response, or echoes the prompt if none is queued.
 
-    def __init__(self, responses: list[str] | None = None):
+    For the agent, `turns` scripts `chat_with_tools`: each call pops the next
+    ChatTurn (or raises it, if it's an exception). `chat_calls` records what each
+    call was sent, copied, so tests can check the messages and the tools offered.
+    """
+
+    def __init__(
+        self,
+        responses: list[str] | None = None,
+        turns: list[ChatTurn | Exception] | None = None,
+    ):
         self._responses = list(responses or [])
         self.calls: list[str] = []
+        self.turns: list[ChatTurn | Exception] = list(turns or [])
+        self.chat_calls: list[dict[str, Any]] = []
 
     def generate(self, prompt: str, *, temperature: float = 0.2, num_ctx: int = 8192) -> str:
         self.calls.append(prompt)
@@ -27,6 +40,22 @@ class FakeLLMClient(LLMClient):
         words = text.split(" ")
         for i, word in enumerate(words):
             yield word + (" " if i < len(words) - 1 else "")
+
+    def chat_with_tools(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+        *,
+        temperature: float = 0.0,
+        num_ctx: int = 8192,
+    ) -> ChatTurn:
+        self.chat_calls.append({"messages": copy.deepcopy(messages), "tools": copy.deepcopy(tools)})
+        if not self.turns:
+            return ChatTurn(content="[fake answer]")
+        turn = self.turns.pop(0)
+        if isinstance(turn, Exception):
+            raise turn
+        return turn
 
 
 class FakeEmbeddingClient(EmbeddingClient):
