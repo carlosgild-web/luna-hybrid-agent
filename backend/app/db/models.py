@@ -341,7 +341,8 @@ class WatchedFolder(Base):
 
 class AgentTraceRecord(Base):
     """One agent run (invariant 8): the question, every model turn and tool call in
-    `steps` (tool results verbatim, invariant 11), and the answer. Saved through
+    `steps` (tool results verbatim, invariant 11), the answer, and `checks`, its
+    citation and number check (decision 0036). Saved through
     `versioning/agent_traces.py`. Phase 6 links chat messages to it."""
 
     __tablename__ = "agent_traces"
@@ -357,6 +358,7 @@ class AgentTraceRecord(Base):
     prompt_tokens: Mapped[int] = mapped_column(default=0)
     completion_tokens: Mapped[int] = mapped_column(default=0)
     duration_ms: Mapped[int] = mapped_column(default=0)
+    checks: Mapped[dict | None] = mapped_column(JSON, default=None)
     created_at: Mapped[dt.datetime] = mapped_column(default=utcnow, index=True)
 
 

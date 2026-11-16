@@ -1,8 +1,10 @@
 """The agent trace: every LLM turn and tool call of one run, in order (invariant 8).
 
 A tool step keeps `result` exactly as the model was shown it (`ToolResult.to_message()`),
-so an answer can be rebuilt from its trace (invariant 11). The trace lives in memory
-while the loop runs; `versioning/agent_traces.py` stores it.
+so an answer can be rebuilt from its trace (invariant 11), and `meta`, the provenance the
+model never saw (the chunks behind document passages). `checks` holds the answer check
+(`agent/answer.py`). The trace lives in memory while the loop runs;
+`versioning/agent_traces.py` stores it.
 """
 
 import datetime as dt
@@ -43,6 +45,7 @@ class ToolStep:
     result: str
     ms: int
     reused: bool = False
+    meta: dict[str, Any] = field(default_factory=dict)
     kind: Literal["tool"] = "tool"
 
 
@@ -59,6 +62,7 @@ class AgentTrace:
     answer: str = ""
     error: str | None = None
     duration_ms: int = 0
+    checks: dict[str, Any] | None = None  # citations and numbers, once answered
     id: int | None = None  # set once stored
 
     @property
@@ -103,5 +107,6 @@ class AgentTrace:
             "prompt_tokens": self.prompt_tokens,
             "completion_tokens": self.completion_tokens,
             "duration_ms": self.duration_ms,
+            "checks": self.checks,
             "steps": self.steps_as_dicts(),
         }

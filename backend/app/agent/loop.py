@@ -11,8 +11,9 @@ One run is a bounded conversation with the model on Ollama's `tools` API:
    offered, answers from what the run has so far.
 
 Everything lands in an `AgentTrace` (invariant 8), with each tool result exactly as
-the model saw it (invariant 11). The loop stores nothing itself; callers save the
-trace through `versioning/agent_traces.py`.
+the model saw it (invariant 11). Once the model answers, `agent/answer.py` checks the
+answer's citations and numbers against the trace. The loop stores nothing itself;
+callers save the trace through `versioning/agent_traces.py`.
 """
 
 import datetime as dt
@@ -25,6 +26,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from app.agent.answer import check_answer
 from app.agent.registry import ToolContext, ToolRegistry, ToolResult
 from app.agent.trace import AgentTrace, LLMStep, Status, Step, ToolStep
 from app.core.config import Settings
@@ -34,17 +36,33 @@ logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = """\
 You are Luna, the assistant of Hilda & Luna Beadworks, a small company that designs and \
-sells beaded jewelry. You answer questions about the business with the tools you are given.
+sells beaded jewelry. You answer questions about the business with the tools you are given.{tools}
 
 Rules:
 - Every number in your answer (stock, units, money, dates, percentages) must come from a \
 tool result in this conversation. Never use numbers from memory and never estimate.
-- When the question needs business data, call a tool. You may call several tools.
+- {when}
 - If a tool returns an error, read it, fix the arguments and try once more.
 - If the tools don't have what the question asks, say so plainly instead of guessing.
 - Answer in the language of the question. Be brief and name products with their SKU.
 
 Today is {today}."""
+
+WHEN_DATABASE_ONLY = (
+    "When the question needs business data, call a tool. You may call several tools."
+)
+
+# With search_documents offered (Phase 4): which source answers what, and how to cite.
+HYBRID_TOOLS = """ search_documents finds what the company's documents say (policies, \
+procedures, agreements, meeting notes); the other tools read the business database (stock, \
+sales, purchases)."""
+HYBRID_WHEN = """\
+Call the tool that has the facts: search_documents for what a document says, the database \
+tools for stock, sales and purchases. A question that compares the two needs both. You may \
+call several tools.
+- Cite each fact from a document with its passage number, e.g. [2]. Facts from the database \
+get no number: say they come from the database (the sales records, the inventory).
+- If a document and the database disagree, say so and give both figures."""
 
 FINAL_CALL = (
     "Stop calling tools now. Answer the question with the tool results above. If they "
@@ -62,6 +80,8 @@ NO_ANSWER = (
 )
 
 OnStep = Callable[[Step], None]
+
+DOCUMENTS_TOOL = "search_documents"
 
 
 @dataclass(frozen=True)
@@ -87,8 +107,13 @@ class AgentLimits:
         )
 
 
-def system_prompt(today: dt.date) -> str:
-    return SYSTEM_PROMPT.format(today=today.isoformat())
+def system_prompt(today: dt.date, *, documents: bool = False) -> str:
+    """`documents`: search_documents is offered, so add the citation rules."""
+    return SYSTEM_PROMPT.format(
+        today=today.isoformat(),
+        tools=HYBRID_TOOLS if documents else "",
+        when=HYBRID_WHEN if documents else WHEN_DATABASE_ONLY,
+    )
 
 
 def run_agent(
@@ -104,13 +129,16 @@ def run_agent(
 ) -> AgentTrace:
     """Answers `question` with the tools in `registry`. Never raises for the model's
     or a tool's failure: the trace's status and error say what happened."""
-    run = _Run(llm, registry, ctx, limits or AgentLimits(), on_step)
+    run = _Run(llm, registry, ctx.for_new_run(), limits or AgentLimits(), on_step)
     run.trace = AgentTrace(question=question, model=model)
+    today = today or dt.date.today()
     started = time.perf_counter()
     try:
-        run.execute(question, today or dt.date.today())
+        run.execute(question, today)
     finally:
         run.trace.duration_ms = _ms_since(started)
+    if run.trace.status != "llm_error":
+        run.trace.checks = check_answer(run.trace, today).to_dict()
     return run.trace
 
 
@@ -137,7 +165,10 @@ class _Run:
 
     def execute(self, question: str, today: dt.date) -> None:
         self.messages = [
-            {"role": "system", "content": system_prompt(today)},
+            {
+                "role": "system",
+                "content": system_prompt(today, documents=DOCUMENTS_TOOL in self.registry.names),
+            },
             {"role": "user", "content": question},
         ]
         for iteration in range(1, self.limits.max_iterations + 1):
@@ -231,6 +262,7 @@ class _Run:
                 result=shown,
                 ms=ms,
                 reused=reused,
+                meta=result.meta,
             )
         )
         self.messages.append({"role": "tool", "tool_name": call.name, "content": shown})
