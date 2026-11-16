@@ -4,7 +4,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Ver
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-11-16
+
+The first release of **Luna Hybrid Agent**, the v1.0.1 app of [local-rag-ollama](https://github.com/carlosgild-web/local-rag-ollama) with an agent on top: Luna decides for each question whether to search the documents, query the business database, fetch an exchange rate, draw a chart or combine them, and shows every step. Phases 0–8 of [PLAN_HYBRID.md](PLAN_HYBRID.md).
+
+### Upgrading
+
+- From local-rag-ollama v1.0.1: the data directory works as it is, and migrations 0011–0013 (the agent traces) run on start. Pull the agent model with `ollama pull qwen3:4b-instruct-2507-q4_K_M` (the start scripts offer it), or set `AGENT_MODEL` to another model that supports tool calling. Click **Load the demo company** again, or run `python -m app.cli seed-business-db`, to get the business database: already-stored documents are skipped.
+- `compose.yaml` now pulls `ghcr.io/carlosgild-web/luna-hybrid-agent`, and the start scripts download the web app from this repo's releases.
+
 ### Added
+
+- **Phase 8, portfolio polish.** "Load the demo company" now also builds the business database when there is none, so one click gives Luna her documents and her data. Docker demo mode pulls `qwen3:4b-instruct-2507` for the agent (about 5.6 GB in all) and keeps one model loaded at a time. The start scripts save, download and pass `AGENT_MODEL`. The README is rewritten: what the agent does, why it's harder than plain RAG, the architecture, the evaluation runs and the limitations. The demo video's shot script is in [`docs/showcase/video-script.md`](docs/showcase/video-script.md) ([decision 0041](docs/decisions/0041-portfolio-release.md)).
 
 - **Phase 0, the new repo.** `luna-hybrid-agent` starts from `local-rag-ollama` (v1.0.1 plus the CodeQL fix below) as one baseline commit. Added the plan ([PLAN_HYBRID.md](PLAN_HYBRID.md)), the agent invariants in `CLAUDE.md`, and [decision 0032](docs/decisions/0032-no-agent-framework.md): why there's no LangChain or LlamaIndex.
 
@@ -32,9 +43,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Ver
 
 ### Changed
 
-- The app is now called **Luna Hybrid Agent** (API title, browser tab, console sidebar). The README is a short stub until Phase 8 rewrites it.
+- The app is now called **Luna Hybrid Agent** (API title, browser tab, console sidebar).
+- The Ollama image in `compose.yaml` and `compose.demo.yaml` is pinned to `0.40.16`, the version the agent evaluation ran on.
 
-The entries below were already unreleased in `local-rag-ollama` at the time of the import.
+The entries below were unreleased in `local-rag-ollama` at the time of the import, and ship in 2.0.0.
 
 ### Security
 
