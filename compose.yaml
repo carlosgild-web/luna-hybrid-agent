@@ -2,6 +2,7 @@
 #   docker compose up -d
 #   docker compose exec ollama ollama pull bge-m3
 #   docker compose exec ollama ollama pull llama3.1      # or qwen2.5:3b on 8 GB RAM
+#   docker compose exec ollama ollama pull qwen3:4b-instruct-2507-q4_K_M  # Luna's agent
 #   docker compose exec app python -m app.cli seed-demo  # optional demo company
 # Then open http://localhost:8000/site (demo) or http://localhost:8000 (console).
 #
@@ -14,7 +15,7 @@
 
 services:
   ollama:
-    image: ollama/ollama:latest # pin a version later (Phase 8)
+    image: ollama/ollama:0.40.16 # the version the agent evaluation ran on
     volumes:
       - ollama_models:/root/.ollama
     # No published port: the app reaches Ollama on Compose's own network
@@ -35,12 +36,14 @@ services:
     #           capabilities: [gpu]
 
   app:
-    image: ghcr.io/carlosgild-web/local-rag-ollama:latest
+    image: ghcr.io/carlosgild-web/luna-hybrid-agent:latest
     build: .
     environment:
       OLLAMA_BASE_URL: http://ollama:11434
       DATA_DIR: /data
       CHAT_MODEL: ${CHAT_MODEL:-llama3.1}
+      # Luna's agent (decision 0035). Empty = CHAT_MODEL.
+      AGENT_MODEL: ${AGENT_MODEL:-qwen3:4b-instruct-2507-q4_K_M}
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-bge-m3}
       WATCH_POLLING: "true"
       WATCH_ROOTS: /watch # only the mounted inbox can be watched (decision 0025)

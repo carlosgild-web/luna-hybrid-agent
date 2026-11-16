@@ -23,9 +23,11 @@ ROOT="$(cd "$(dirname "$0")" && pwd)"
 ENV_FILE="$ROOT/.env"
 DATA_DIR="$ROOT/data"
 LOG_FILE="$DATA_DIR/start.log"
-REPO="carlosgild-web/local-rag-ollama"
+REPO="carlosgild-web/luna-hybrid-agent"
 OLLAMA_URL="http://127.0.0.1:11434"
 EMBEDDING_MODEL="bge-m3"
+# Luna's agent model (decision 0035): the best tool caller of the small models tested.
+DEFAULT_AGENT_MODEL="qwen3:4b-instruct-2507-q4_K_M"
 OS="$(uname -s)"
 LOGGING=0
 OLLAMA_STARTED_HERE=0
@@ -104,8 +106,16 @@ size_of() {
     bge-m3) echo " (about 1.2 GB)" ;;
     qwen2.5:3b) echo " (about 1.9 GB)" ;;
     llama3.1) echo " (about 4.9 GB)" ;;
+    qwen3:4b-instruct-2507-q4_K_M) echo " (about 2.5 GB)" ;;
     *) echo "" ;;
   esac
+}
+
+# The embedding, chat and agent models, each once (model names have no spaces).
+models_to_pull() {
+  echo "$EMBEDDING_MODEL"
+  [ "$CHAT_MODEL" = "$EMBEDDING_MODEL" ] || echo "$CHAT_MODEL"
+  [ "$AGENT_MODEL" = "$CHAT_MODEL" ] || echo "$AGENT_MODEL"
 }
 
 has() { command -v "$1" >/dev/null 2>&1; }
@@ -137,11 +147,12 @@ open_url() {
 
 # --- Saved answers (.env, also read by Docker Compose) ---------------------------
 
-START_ROUTE=""; CHAT_MODEL=""; APP_PORT=""
+START_ROUTE=""; CHAT_MODEL=""; AGENT_MODEL=""; APP_PORT=""
 read_settings() {
   [ -f "$ENV_FILE" ] || return 0
   START_ROUTE="$(sed -n 's/^START_ROUTE=//p' "$ENV_FILE" | tail -1)"
   CHAT_MODEL="$(sed -n 's/^CHAT_MODEL=//p' "$ENV_FILE" | tail -1)"
+  AGENT_MODEL="$(sed -n 's/^AGENT_MODEL=//p' "$ENV_FILE" | tail -1)"
   APP_PORT="$(sed -n 's/^APP_PORT=//p' "$ENV_FILE" | tail -1)"
 }
 save_settings() {
@@ -149,6 +160,7 @@ save_settings() {
     echo "# Written by start.cmd / start.sh. Docker Compose reads it too. Safe to delete."
     echo "START_ROUTE=$START_ROUTE"
     echo "CHAT_MODEL=$CHAT_MODEL"
+    echo "AGENT_MODEL=$AGENT_MODEL"
     echo "EMBEDDING_MODEL=$EMBEDDING_MODEL"
     echo "APP_PORT=$APP_PORT"
   } > "$ENV_FILE"
@@ -373,7 +385,7 @@ start_route_c() {
   mkdir -p "$DATA_DIR"
   (
     cd "$ROOT/backend" || exit 1
-    DATA_DIR="$DATA_DIR" CHAT_MODEL="$CHAT_MODEL" EMBEDDING_MODEL="$EMBEDDING_MODEL" OLLAMA_BASE_URL="$OLLAMA_URL" \
+    DATA_DIR="$DATA_DIR" CHAT_MODEL="$CHAT_MODEL" AGENT_MODEL="$AGENT_MODEL" EMBEDDING_MODEL="$EMBEDDING_MODEL" OLLAMA_BASE_URL="$OLLAMA_URL" \
       nohup .venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port "$APP_PORT" --workers 1 \
       > "$DATA_DIR/server.log" 2>&1 < /dev/null &
     echo $! > "$DATA_DIR/app.pid"
@@ -566,7 +578,7 @@ explain_check() {
       info "Without Docker: route C (Python), installing Ollama and Python first if needed, after asking."
     fi
   fi
-  info "Chat model: ${CHAT_MODEL:-$2}; embedding model: $EMBEDDING_MODEL"
+  info "Chat model: ${CHAT_MODEL:-$2}; agent model: ${AGENT_MODEL:-$DEFAULT_AGENT_MODEL}; embedding model: $EMBEDDING_MODEL"
   say ""; say "--check: nothing was changed."
 }
 
@@ -684,7 +696,8 @@ do_start() {
   if [ -z "$CHAT_MODEL" ] || [ "$RECONFIGURE" = 1 ]; then
     if [ "$route" = "A" ]; then choose_chat_model "$suggested" 0; else choose_chat_model "$suggested" 1; fi
   fi
-  info "Chat model: $CHAT_MODEL; embedding model: $EMBEDDING_MODEL"
+  [ -n "$AGENT_MODEL" ] || AGENT_MODEL="$DEFAULT_AGENT_MODEL"
+  info "Chat model: $CHAT_MODEL; agent model: $AGENT_MODEL; embedding model: $EMBEDDING_MODEL"
 
   if ! port_free "$port"; then
     for p in 8001 8002 8003 8004 8005 8006 8007 8008 8009 8010; do port_free "$p" && break; done
@@ -696,7 +709,7 @@ do_start() {
   save_settings
 
   if [ "$route" != "A" ]; then
-    for m in "$EMBEDDING_MODEL" "$CHAT_MODEL"; do
+    for m in $(models_to_pull); do
       if has_model "$m"; then ok "$m is already downloaded"
       elif ask "Download $m$(size_of "$m") into Ollama now?"; then ollama pull "$m" || fail "Couldn't download $m."
       else warn "$m isn't downloaded; the app will ask for it."; fi
@@ -712,7 +725,7 @@ do_start() {
     compose "$route" pull --quiet app 2>/dev/null || warn "Couldn't check for a newer app image; using the one already downloaded."
     compose "$route" up -d || fail "docker compose up failed; see the messages above."
     if [ "$route" = "A" ]; then
-      for m in "$EMBEDDING_MODEL" "$CHAT_MODEL"; do pull_in_docker "$m"; done
+      for m in $(models_to_pull); do pull_in_docker "$m"; done
     fi
   fi
   wait_healthy "$port" || warn "The app isn't fully healthy yet. Open http://localhost:$port and click Troubleshoot."

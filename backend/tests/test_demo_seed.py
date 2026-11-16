@@ -1,5 +1,7 @@
 """Loading the demo company from the console: POST /api/demo/seed queues a job."""
 
+import sqlite3
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
@@ -48,10 +50,34 @@ def test_seed_runs_as_a_job_and_fills_the_library(client, demo_root, runtime):
     body = client.get("/api/demo").json()
     assert body["documents"] == 3
     assert body["job"]["status"] == "completed"
-    assert body["job"]["result"] == {"ingested": 3, "skipped": 0}
+    assert body["job"]["result"] == {"ingested": 3, "skipped": 0, "business_db_created": True}
     with runtime.session_factory() as db:
         actions = db.execute(select(AuditLog.action)).scalars().all()
     assert "demo_seed" in actions
+    assert "business_db_seed" in actions
+
+
+def test_seed_builds_the_business_database_luna_reads(client, demo_root, runtime):
+    """One click gives the agent its data too (decision 0041)."""
+    path = runtime.settings.business_db_file
+    assert not path.exists()
+    client.post("/api/demo/seed")
+    client.drain()
+    cx = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+    try:
+        assert cx.execute("SELECT COUNT(*) FROM productos").fetchone()[0] == 13
+    finally:
+        cx.close()
+
+
+def test_seed_never_replaces_an_existing_business_database(client, demo_root, runtime):
+    path = runtime.settings.business_db_file
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(b"someone else's database")
+    client.post("/api/demo/seed")
+    client.drain()
+    assert path.read_bytes() == b"someone else's database"
+    assert client.get("/api/demo").json()["job"]["result"]["business_db_created"] is False
 
 
 def test_a_second_request_while_one_is_queued_is_refused(client, demo_root):
@@ -65,7 +91,7 @@ def test_loading_again_skips_every_file(client, demo_root):
     client.post("/api/demo/seed")
     client.drain()
     job = client.get("/api/demo").json()["job"]
-    assert job["result"] == {"ingested": 0, "skipped": 3}
+    assert job["result"] == {"ingested": 0, "skipped": 3, "business_db_created": False}
     assert client.get("/api/demo").json()["documents"] == 3
 
 

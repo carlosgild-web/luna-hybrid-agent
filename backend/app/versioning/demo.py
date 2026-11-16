@@ -75,6 +75,21 @@ def seed_demo(
     return results
 
 
+def ensure_business_db(db: Session, settings: Settings) -> bool:
+    """Builds the demo company's business database when there is none, so one
+    click on "Load the demo company" also gives Luna her sales and stock data
+    (decision 0041). An existing database is never replaced: rebuilding it is
+    `python -m app.cli seed-business-db`. Returns whether it was created."""
+    path = settings.business_db_file
+    if path.exists():
+        return False
+    from app.agent.business_seed import seed_business_db
+
+    seed_business_db(path)
+    service.audit_event(db, "business_db_seed", "business_db", None, path.name)
+    return True
+
+
 def demo_glossary_missing(db: Session) -> bool:
     """True when the demo company was loaded but its glossary never was: a
     library loaded before v0.9.0, which added the glossary (decision 0021).

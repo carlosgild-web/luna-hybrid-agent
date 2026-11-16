@@ -115,8 +115,10 @@ def handle_analyze_intake(
 def handle_seed_demo(
     db: Session, payload: dict, runtime: Runtime, progress: ProgressCallback
 ) -> dict:
-    """Loads the demo company (the same as `app.cli seed-demo`)."""
+    """Loads the demo company (the same as `app.cli seed-demo`): the documents,
+    and the business database if there is none yet."""
     progress(0.0)
+    business_db_created = demo.ensure_business_db(db, runtime.settings)
     results = demo.seed_demo(
         db,
         settings=runtime.settings,
@@ -126,7 +128,11 @@ def handle_seed_demo(
         progress=progress,
     )
     ingested = sum(item.status == "ingested" for item in results)
-    return {"ingested": ingested, "skipped": len(results) - ingested}
+    return {
+        "ingested": ingested,
+        "skipped": len(results) - ingested,
+        "business_db_created": business_db_created,
+    }
 
 
 def handle_backup(db: Session, payload: dict, runtime: Runtime, progress: ProgressCallback) -> dict:
