@@ -18,6 +18,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Ver
 
 - **Phase 5, exchange rates and charts.** Luna can now answer "how many pesos is 100 dollars today?" with a new `fx_rate` tool, which also does the conversion. External APIs are off by default (`ALLOW_EXTERNAL_APIS=false`), so she uses the rate stored in the company's books (18.50 MXN per USD) and says so. With the flag on, she fetches the day's rate from frankfurter.dev (no key needed). The rate is cached for an hour, every request is written to the audit log (`external_call`), and a failed request falls back to the stored rate with the reason ([decision 0037](docs/decisions/0037-external-by-explicit-consent.md)). A `make_chart` tool turns numbers from another tool into a line, bar or pie chart spec. The spec is stored with the run's trace and served at `GET /api/agent/traces/{id}/charts/{chart_id}`, so the chat can render it in Phase 6. The answer check now also traces every value in a chart to a tool result ([decision 0038](docs/decisions/0038-chart-specs-in-the-trace.md)).
 
+- **Phase 6, the agent in the chat.** The console chat has a Documents/Agent switch, and the portal's Luna answers with "Documents + business data" by default. While Luna works, each tool call appears as it happens ("Reading the sales records `sales_report` ✓ 0.1 s"). Charts from `make_chart` are drawn under the answer with recharts, with a "Show the data" table. Every agent answer links to the new **agent inspector** (`/agent/:id`). It rebuilds the run from its stored trace: totals, a timeline of every model call and tool call with its arguments, the result rows exactly as the model saw them, tokens and latency, then the answer with its citations and the check of every number. Behind it, `POST /api/agent/chat` streams the steps over SSE, the run finishes and is saved even if the browser leaves, answers are linked to their trace (migration 0013) and keep their passages as sources, and `GET /api/agent/traces/{id}` returns the run ([decision 0039](docs/decisions/0039-agent-chat-and-inspector.md)).
+
+### Fixed
+
+- The agent's answer check no longer reads a list of numbers in brackets, like `[1200, 1500, 1420]`, as a citation. Those numbers are now checked against the tool results, and a real citation next to them still counts.
+- An agent answer that uses only the business database no longer shows the "no citations" warning in the chat.
+
 ### Changed
 
 - The app is now called **Luna Hybrid Agent** (API title, browser tab, console sidebar). The README is a short stub until Phase 8 rewrites it.
