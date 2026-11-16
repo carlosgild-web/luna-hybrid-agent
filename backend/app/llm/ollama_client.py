@@ -2,10 +2,11 @@
 
 import json
 from collections.abc import Iterator
+from typing import Any
 
 import httpx
 
-from app.llm.base import EmbeddingClient, LLMClient
+from app.llm.base import ChatTurn, EmbeddingClient, LLMClient, ToolCall
 
 
 class OllamaError(httpx.HTTPError):
@@ -80,6 +81,38 @@ class OllamaLLMClient(LLMClient):
                     yield data["response"]
                 if data.get("done"):
                     break
+
+    def chat_with_tools(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+        *,
+        temperature: float = 0.0,
+        num_ctx: int = 8192,
+    ) -> ChatTurn:
+        body: dict[str, Any] = {
+            "model": self._model,
+            "messages": messages,
+            "stream": False,
+            "options": {"temperature": temperature, "num_ctx": num_ctx},
+        }
+        if tools:
+            body["tools"] = tools
+        response = httpx.post(f"{self._base_url}/api/chat", json=body, timeout=self._timeout)
+        _check(response, self._model)
+        data = response.json()
+        message = data.get("message") or {}
+        calls = []
+        for call in message.get("tool_calls") or []:
+            function = call.get("function") or {}
+            if function.get("name"):
+                calls.append(ToolCall(function["name"], function.get("arguments")))
+        return ChatTurn(
+            content=message.get("content") or "",
+            tool_calls=calls,
+            prompt_tokens=int(data.get("prompt_eval_count") or 0),
+            completion_tokens=int(data.get("eval_count") or 0),
+        )
 
 
 class OllamaEmbeddingClient(EmbeddingClient):

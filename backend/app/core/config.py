@@ -7,6 +7,7 @@ No hardcoded paths — everything persistent lives under `DATA_DIR`.
 from functools import lru_cache
 from pathlib import Path
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -42,6 +43,14 @@ class Settings(BaseSettings):
     rerank_model_dir: Path | None = None  # default DATA_DIR/hf/bge-reranker-v2-m3-onnx
     llm_temperature: float = 0.0  # repeatable answers (decision 0016)
     ollama_num_ctx: int = 8192
+
+    # Agent loop (PLAN_HYBRID.md Phase 3, decision 0035). Empty AGENT_MODEL = CHAT_MODEL;
+    # qwen2.5:7b is the recommended model for tool calling.
+    agent_model: str = ""
+    agent_max_iterations: int = Field(6, ge=1)  # model calls per question, final one included
+    agent_tool_timeout_s: float = Field(20.0, gt=0)
+    agent_token_budget: int = Field(32_000, ge=1)  # prompt + completion tokens per question
+    agent_temperature: float = 0.0
 
     # OCR fallback for low-text-yield PDF pages
     ocr_lang: str = "eng+spa"
@@ -103,6 +112,11 @@ class Settings(BaseSettings):
     @property
     def business_db_file(self) -> Path:
         return self.business_db_path or self.data_dir / "business" / "hilda_luna.db"
+
+    @property
+    def agent_chat_model(self) -> str:
+        """The model the agent loop talks to."""
+        return self.agent_model or self.chat_model
 
     @property
     def watch_root_paths(self) -> list[Path]:

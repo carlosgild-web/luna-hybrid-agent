@@ -339,6 +339,27 @@ class WatchedFolder(Base):
     collection: Mapped["Collection"] = relationship()
 
 
+class AgentTraceRecord(Base):
+    """One agent run (invariant 8): the question, every model turn and tool call in
+    `steps` (tool results verbatim, invariant 11), and the answer. Saved through
+    `versioning/agent_traces.py`. Phase 6 links chat messages to it."""
+
+    __tablename__ = "agent_traces"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    question: Mapped[str] = mapped_column(Text)
+    model: Mapped[str]
+    status: Mapped[str] = mapped_column(index=True)
+    steps: Mapped[list[dict]] = mapped_column(JSON, default=list)
+    answer: Mapped[str] = mapped_column(Text, default="")
+    error: Mapped[str | None] = mapped_column(Text, default=None)
+    iterations: Mapped[int] = mapped_column(default=0)
+    prompt_tokens: Mapped[int] = mapped_column(default=0)
+    completion_tokens: Mapped[int] = mapped_column(default=0)
+    duration_ms: Mapped[int] = mapped_column(default=0)
+    created_at: Mapped[dt.datetime] = mapped_column(default=utcnow, index=True)
+
+
 class AuditLog(Base):
     """Every upload, delete, rollback, reindex, and settings change
     (invariant 7)."""
