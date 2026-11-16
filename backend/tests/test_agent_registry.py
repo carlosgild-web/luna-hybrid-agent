@@ -96,6 +96,8 @@ def test_every_registered_tool_has_a_valid_declaration():
         "sales_report",
         "supplier_purchases",
         "sql_select",
+        "fx_rate",
+        "make_chart",
     ]
     for declaration in registry.ollama_tools():
         json.dumps(declaration)  # serializable as-is
