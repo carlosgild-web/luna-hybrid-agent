@@ -61,6 +61,8 @@ ruff check . && ruff format --check .
 python -m app.cli ingest ./docs
 python -m app.cli ask "your question"
 python -m app.cli seed-business-db   # the demo business DB, DATA_DIR/business/hilda_luna.db
+python -m app.cli agent-eval --fake  # the 30-question agent suite, scripted model (CI)
+python -m app.cli agent-eval         # the same on Ollama (app stopped, ~50 min); see decision 0040
 
 # frontend
 cd frontend && npm ci && npm run dev      # Vite dev server, proxies /api to :8000
