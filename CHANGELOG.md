@@ -10,6 +10,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Ver
 
 - **Phase 1, the business database.** `python -m app.cli seed-business-db` builds the demo company's business data in `DATA_DIR/business/hilda_luna.db` (or `BUSINESS_DB_PATH`): 13 products, inventory, 68 customers, 937 orders from January to 14 November 2026, suppliers and their purchases. It is the same every time, and it agrees with the Q3 sales meeting notes (CH-2004: 4,120 units; GB-1014: 3,340; GB-1027 down 22% from Q2), so the agent's SQL answers can be checked against the documents. The agent opens it read-only in three layers; every kind of write raises ([decision 0033](docs/decisions/0033-business-db-generator-in-backend.md)).
 
+- **Phase 2, the agent's business tools.** A tool registry turns each tool's declaration into the schema Ollama's function calling expects and checks every call before it runs. The model gets a readable error it can fix, not a failure. Four tools read the business database: `check_inventory` (stock and what needs restocking), `sales_report` (sales between two dates by month, quarter, SKU, category, channel, collection or customer, in USD and MXN), `supplier_purchases`, and `sql_select` for questions the others can't answer. It accepts a single read-only SELECT, with at most 200 rows and 3 seconds. Each tool is tested against the reference questions, and `sql_select` against a set of hostile queries ([decision 0034](docs/decisions/0034-tool-registry-and-business-tools.md)).
+
 ### Changed
 
 - The app is now called **Luna Hybrid Agent** (API title, browser tab, console sidebar). The README is a short stub until Phase 8 rewrites it.
