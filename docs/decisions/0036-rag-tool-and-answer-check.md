@@ -77,19 +77,27 @@ The check reports and changes nothing. Known limits:
 `qwen3:4b-instruct-2507-q4_K_M`, with the 11 demo documents and the seeded business
 database:
 
-- First model call (1,549 + 90 tokens, 38 s): `sales_report` (Q3 2026, by SKU) and
-  `search_documents` ("Q3 sales meeting CH-2004 units", shelf `meetings`) together.
-  Both tools returned the right data: 4,120 units, and the notes as passage [1].
-- Second call: past the 300 s HTTP timeout. While the laptop was running WSL (3 GB),
-  SQL Server and the Power BI gateway, with 0.8 GB free, loading `bge-m3` for the
-  query pushed the chat model's weights out of RAM.
-- The same second call, replayed from the stored trace with only the chat model
-  loaded (3,261 + 99 tokens, 277 s, still swapping): "Yes, CH-2004's Q3 sales match
-  what the Q3 meeting notes say. The sales report shows that CH-2004 ('Crescent Moon
-  & Star') had 4,120 units sold in Q3 2026 [sales_report]. The meeting notes state
-  that CH-2004 was the best-selling SKU with 4,120 units sold [1]."
+- First model call (1,549 + 90 tokens): `sales_report` (Q3 2026, by SKU) and
+  `search_documents` ("Q3 sales meeting CH-2004 units", shelf `meetings`), together.
+  Both returned the right data: 4,120 units, and the notes as passage [1] (search
+  6.9 s, including the query embedding).
+- Second model call (3,261 + 99 tokens, 112 s): "Yes, CH-2004's Q3 sales match what
+  the Q3 meeting notes say. The sales report shows that CH-2004 ('Crescent Moon &
+  Star') had 4,120 units sold in Q3 2026 [sales_report]. The meeting notes state that
+  CH-2004 was the best-selling SKU with 4,120 units sold [1]. Both sources agree on
+  the unit sales figure."
+- The check: citations `ok`, [1] is the meeting notes, and both "4,120" come from
+  `sales_report` and `search_documents [1]`. No unsupported numbers. In all: 2 model
+  calls, 4,999 tokens, 199 s.
 
-<!-- ACCEPTANCE-END -->
+The model wrote the tool's name in brackets, "[sales_report]", by itself. The
+citation check only reads numeric markers, so the bracket does no harm, and the UI
+can style it later.
+
+The first attempt timed out at the 300 s HTTP limit. WSL, SQL Server, the Power BI
+gateway and the Claude desktop app's Cowork VM were using about 4 GB, and loading
+`bge-m3` for the query pushed the chat model's weights out of RAM. With those
+stopped, the same run took 199 s.
 
 ## Consequences
 
