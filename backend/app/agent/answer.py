@@ -91,6 +91,23 @@ def check_answer(trace: AgentTrace, today: dt.date | None = None) -> AnswerCheck
     return AnswerCheck(status, cited, sources, numbers, _charts(trace))
 
 
+def states_value(answer: str, value: Decimal) -> bool:
+    """Whether `answer` writes `value`, at the precision it chose: "519,726" and
+    "519.725,51" both state 519725.51, "60%" states 59.8 (the agent evaluation)."""
+    return any(
+        _rounds_to(value, reading) for _, readings_ in _claims(answer, {}) for reading in readings_
+    )
+
+
+def tools_with_value(trace: AgentTrace, value: Decimal) -> list[str]:
+    """The tool results (and passages) of `trace` that contain `value`."""
+    return [
+        label
+        for label, ev in _evidence(trace, None)
+        if label != "question" and ev.supports(str(value), {value})
+    ]
+
+
 def _charts(trace: AgentTrace) -> list[dict[str, Any]]:
     """Each chart made in the run, with the values no earlier tool result contains."""
     charts: list[dict[str, Any]] = []

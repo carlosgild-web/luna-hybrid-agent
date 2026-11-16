@@ -8,6 +8,8 @@ Usage:
     python -m app.cli agent "<question>" [--json]
     python -m app.cli eval [--set NAME] [--mode hybrid|vector|keyword] [--answers] [--judge]
     python -m app.cli eval-compare <run a> <run b>
+    python -m app.cli agent-eval [--fake] [--tier T] [--case ID] [--judge] [--label L]
+    python -m app.cli agent-eval-compare <report.json> <report.json> ...
     python -m app.cli set-password [--stdin]
     python -m app.cli clear-password
 """
@@ -293,6 +295,138 @@ _METRICS = (
 )
 
 
+def _print_case(result, n: int, total: int) -> None:
+    verdict = "pass" if result.passed else "FAIL"
+    tools = ", ".join(result.tools_called) or "no tools"
+    print(
+        f"[{n:>2}/{total}] {verdict}  {result.id:<20} {result.duration_ms / 1000:6.1f} s  "
+        f"{result.iterations} model calls ({tools})",
+        flush=True,
+    )
+    for failure in result.failures:
+        print(f"         - {_short(failure, 160)}")
+
+
+def cmd_agent_eval(args: argparse.Namespace) -> int:
+    """Runs the agent suite (decision 0040). Real: Luna on Ollama over the app's
+    data, app stopped, each trace stored. --fake: the scripted runs in a scratch
+    data dir, no Ollama (what CI runs); exits 1 if a case fails."""
+    import tempfile
+    import time
+
+    from app.agent.loop import AgentLimits
+    from app.eval import agent_runner, agent_suite
+
+    suite = agent_suite.load_suite(Path(args.suite) if args.suite else agent_suite.SUITE_PATH)
+    cases = [
+        case
+        for case in suite.cases
+        if (not args.tier or case.tier in args.tier) and (not args.case or case.id in args.case)
+    ]
+    if not cases:
+        print("no case matches --tier/--case")
+        return 1
+    started_at = agent_runner.now()
+    counter = {"n": 0}
+
+    def on_result(result) -> None:
+        counter["n"] += 1
+        _print_case(result, counter["n"], len(cases))
+
+    started = time.perf_counter()
+    if args.fake:
+        with tempfile.TemporaryDirectory(prefix="luna-agent-eval-") as tmp:
+            print("fake run: seeding the demo documents and business database in a scratch dir")
+            with agent_runner.fake_runtime(Path(tmp) / "data") as runtime:
+                limits = AgentLimits.from_settings(runtime.settings)
+                model = agent_runner.FAKE_MODEL
+                results = agent_runner.run_suite(
+                    suite,
+                    cases,
+                    runtime=runtime,
+                    model=model,
+                    llm_for=agent_runner.ScriptedLLM,
+                    limits=limits,
+                    judge=agent_runner.ScriptedLLM(cases[0]) if args.judge else None,
+                    on_result=on_result,
+                )
+        judge_model = model if args.judge else None
+    else:
+        from app.db import backup
+        from app.versioning.agent_traces import save_trace
+
+        settings = get_settings()
+        if backup.app_is_running(settings) and not args.force:
+            print("The app is running: stop it first (the eval stores traces in its database).")
+            return 1
+        if not settings.business_db_file.is_file():
+            print(
+                f"no business database at {settings.business_db_file}; "
+                "create it with: python -m app.cli seed-business-db"
+            )
+            return 1
+        runtime = build_runtime(settings)
+        model = args.model or settings.agent_chat_model
+        judge_model = (args.judge_model or model) if args.judge else None
+        limits = AgentLimits.from_settings(settings)
+        print(f"{len(cases)} questions with {model}; traces are stored as they finish")
+
+        def save(trace) -> None:
+            with runtime.session_factory() as db:
+                save_trace(db, trace)
+
+        results = agent_runner.run_suite(
+            suite,
+            cases,
+            runtime=runtime,
+            model=model,
+            llm_for=lambda _case: runtime.llm_client_for(model),
+            limits=limits,
+            judge=runtime.llm_client_for(judge_model) if judge_model else None,
+            save=save,
+            on_result=on_result,
+        )
+
+    report = agent_runner.build_report(
+        results,
+        label=args.label or ("fake" if args.fake else model),
+        model=model,
+        limits=limits,
+        started_at=started_at,
+        fake=args.fake,
+        judge_model=judge_model,
+    )
+    print(f"\n{len(results)} questions in {time.perf_counter() - started:.0f} s\n")
+    print(agent_suite.metrics_table([report]))
+    out = Path(args.out) if args.out else None
+    if out is None and not args.fake:
+        out = get_settings().data_dir / "eval" / "agent"
+    if out is not None:
+        print(f"\nreport: {agent_runner.write_report(report, out)}")
+    return 1 if args.fake and report["metrics"]["passed"] < len(results) else 0
+
+
+def cmd_agent_eval_compare(args: argparse.Namespace) -> int:
+    """Two or more agent-eval reports side by side, then the cases that changed."""
+    from app.eval import agent_runner, agent_suite
+
+    reports = [agent_runner.load_report(Path(path)) for path in args.reports]
+    print(agent_suite.metrics_table(reports))
+    first, last = reports[0], reports[-1]
+    before = {case["id"]: case for case in first["cases"]}
+    changed = []
+    for case in last["cases"]:
+        old = before.get(case["id"])
+        if old is not None and old["passed"] != case["passed"]:
+            changed.append(("fixed" if case["passed"] else "broken", case))
+    if changed:
+        print()
+        for change, case in changed:
+            why = "" if case["passed"] else f"  ({'; '.join(case['failures'])})"
+            print(f"  {change:<7} {case['id']}{why}")
+    return 0
+
+
 def _fmt(value, kind: str) -> str:
     if value is None:
         return "-"
@@ -528,6 +662,36 @@ def main(argv: list[str] | None = None) -> int:
     compare_parser.add_argument("a", type=int, help="Run id")
     compare_parser.add_argument("b", type=int, help="Run id")
     compare_parser.set_defaults(func=cmd_eval_compare)
+
+    agent_eval_parser = subparsers.add_parser(
+        "agent-eval",
+        help="Run the agent suite (30 questions) and print the metrics table (app stopped)",
+    )
+    agent_eval_parser.add_argument(
+        "--fake", action="store_true", help="Scripted model in a scratch dir, no Ollama (CI)"
+    )
+    agent_eval_parser.add_argument(
+        "--tier", action="append", choices=["doc", "db", "external", "hybrid", "refusal"]
+    )
+    agent_eval_parser.add_argument("--case", action="append", help="Run only this case id")
+    agent_eval_parser.add_argument("--model", help="Chat model (default: AGENT_MODEL)")
+    agent_eval_parser.add_argument("--judge", action="store_true", help="LLM-judged faithfulness")
+    agent_eval_parser.add_argument("--judge-model", help="Judge model (default: the chat model)")
+    agent_eval_parser.add_argument("--label", help="A name for the run")
+    agent_eval_parser.add_argument(
+        "--out", help="Report folder (default: DATA_DIR/eval/agent; --fake writes none)"
+    )
+    agent_eval_parser.add_argument("--suite", help="Another suite file (YAML)")
+    agent_eval_parser.add_argument(
+        "--force", action="store_true", help="even if the app seems to run"
+    )
+    agent_eval_parser.set_defaults(func=cmd_agent_eval)
+
+    agent_compare_parser = subparsers.add_parser(
+        "agent-eval-compare", help="Agent-eval reports side by side, and the cases that changed"
+    )
+    agent_compare_parser.add_argument("reports", nargs="+", help="Report files (JSON)")
+    agent_compare_parser.set_defaults(func=cmd_agent_eval_compare)
 
     download_parser = subparsers.add_parser(
         "reranker-download", help="Download the reranker model (about 588 MB) to DATA_DIR/hf"
