@@ -35,7 +35,15 @@ from app.api.schemas import (
 from app.api.sse import SSE_HEADERS, drive_sync_stream, sse
 from app.core import metrics
 from app.core.runtime import Runtime
-from app.db.models import Chunk, Document, DocumentVersion, Feedback, Message, MessageSource
+from app.db.models import (
+    AgentTraceRecord,
+    Chunk,
+    Document,
+    DocumentVersion,
+    Feedback,
+    Message,
+    MessageSource,
+)
 from app.llm.ollama_client import OllamaError
 from app.retrieval.citation_repair import repair_citations
 from app.retrieval.citations import citation_status
@@ -299,6 +307,17 @@ def get_session(db: DbDep, session_id: int):
                 heading=chunk.heading,
             )
         )
+    # Agent answers carry their own check (decision 0036): a database-only answer
+    # needs no citation, which the RAG rule would call "missing".
+    trace_ids = [m.agent_trace_id for m in messages if m.agent_trace_id is not None]
+    agent_citations = {
+        trace_id: (checks or {}).get("citation_status")
+        for trace_id, checks in db.execute(
+            select(AgentTraceRecord.id, AgentTraceRecord.checks).where(
+                AgentTraceRecord.id.in_(trace_ids)
+            )
+        ).all()
+    }
     feedback = {
         f.message_id: f
         for f in db.execute(select(Feedback).where(Feedback.message_id.in_(message_ids)))
@@ -322,7 +341,9 @@ def get_session(db: DbDep, session_id: int):
                 sources=sources.get(m.id, []),
                 feedback=FeedbackOut.model_validate(feedback[m.id]) if m.id in feedback else None,
                 citation_status=(
-                    citation_status(m.content, len(sources.get(m.id, [])))
+                    agent_citations.get(m.agent_trace_id)
+                    if m.agent_trace_id is not None
+                    else citation_status(m.content, len(sources.get(m.id, [])))
                     if m.role == "assistant"
                     else None
                 ),

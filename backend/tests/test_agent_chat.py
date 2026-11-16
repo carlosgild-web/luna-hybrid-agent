@@ -176,6 +176,16 @@ def test_a_follow_up_goes_into_the_same_session(client, seeded):
     assert roles == ["user", "assistant", "user", "assistant"]
 
 
+def test_a_database_only_answer_is_not_flagged_for_missing_citations(client, seeded):
+    seeded.fake_llm.turns = [
+        turn(ToolCall("check_inventory", {"only_below_reorder": True})),
+        turn(content="Two SKUs are below their reorder level, per the inventory."),
+    ]
+    stream = dict(events(client.post("/api/agent/chat", json={"question": "Low stock?"})))
+    session = client.get(f"/api/sessions/{stream['session']['session_id']}").json()
+    assert session["messages"][-1]["citation_status"] == "not_applicable"
+
+
 def test_the_portal_channel_is_kept(client, seeded):
     seeded.fake_llm.turns = [turn(content="Hola.")]
     stream = dict(
