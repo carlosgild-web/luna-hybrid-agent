@@ -21,6 +21,7 @@ def save_trace(db: Session, trace: AgentTrace) -> AgentTraceRecord:
         prompt_tokens=trace.prompt_tokens,
         completion_tokens=trace.completion_tokens,
         duration_ms=trace.duration_ms,
+        checks=trace.checks,
         created_at=trace.started_at,
     )
     db.add(row)

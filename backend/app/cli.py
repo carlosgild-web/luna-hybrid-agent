@@ -153,11 +153,26 @@ def _print_step(step) -> None:
         print(f"[{step.iteration}] tool  {step.name} {state}, {timing}: {_short(step.result)}")
 
 
+def _print_checks(checks: dict) -> None:
+    """The cited passages and where each number came from (decision 0036)."""
+    if checks["sources"]:
+        print("Sources:")
+        for source in checks["sources"]:
+            where = f"page {source['page']}" if source["page"] else source["heading"]
+            print(f"[{source['number']}] {source['filename']}" + (f" ({where})" if where else ""))
+    print(f"Citations: {checks['citation_status']}")
+    for claim in checks["numbers"]:
+        origin = ", ".join(claim["sources"]) or "NOT FOUND IN ANY TOOL RESULT"
+        print(f"  {claim['text']:<14} <- {origin}")
+    print()
+
+
 def cmd_agent(args: argparse.Namespace) -> int:
     """Asks Luna a question with tools; every step is printed and the trace stored."""
     from app.agent.loop import AgentLimits, run_agent
     from app.agent.registry import ToolContext
     from app.agent.tools import build_registry
+    from app.retrieval.library import DocumentLibrary
     from app.versioning.agent_traces import save_trace
 
     runtime = build_runtime(get_settings())
@@ -171,11 +186,12 @@ def cmd_agent(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
 
+    documents = DocumentLibrary.from_runtime(runtime)
     trace = run_agent(
         question,
         llm=runtime.llm_client_for(model),
-        registry=build_registry(),
-        ctx=ToolContext(settings),
+        registry=build_registry(documents),
+        ctx=ToolContext(settings, documents=documents),
         limits=AgentLimits.from_settings(settings),
         model=model,
         on_step=None if args.json else _print_step,
@@ -189,6 +205,8 @@ def cmd_agent(args: argparse.Namespace) -> int:
         print()
         print(trace.answer if trace.status != "llm_error" else f"The model failed: {trace.error}")
         print()
+        if trace.checks:
+            _print_checks(trace.checks)
         print(
             f"trace #{trace.id}: {trace.status}, {trace.iterations} model calls, "
             f"{trace.total_tokens} tokens, {trace.duration_ms / 1000:.1f} s ({model})"

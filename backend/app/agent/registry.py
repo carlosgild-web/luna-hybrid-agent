@@ -9,17 +9,25 @@ about the LLM, the loop or the trace (Phase 3 adds those).
 that don't parse or validate, a `ToolError` from the handler): it returns a
 `ToolResult` with `ok=False` and an error the model can read and retry on. Any
 other exception is a bug and propagates.
+
+A handler returns the dict the model sees, or a `ToolOutput` when it also has
+`meta`: provenance the trace keeps but the model never reads (the chunk ids
+behind document passages, for example).
 """
 
 import json
 import re
-from collections.abc import Callable, Iterator, Mapping
-from dataclasses import dataclass, field
-from typing import Any
+import threading
+from collections.abc import Callable, Hashable, Iterator, Mapping
+from dataclasses import dataclass, field, replace
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from app.core.config import Settings
+
+if TYPE_CHECKING:
+    from app.retrieval.library import DocumentLibrary
 
 _NAME = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 
@@ -35,14 +43,45 @@ class ToolArgs(BaseModel):
     model_config = ConfigDict(extra="ignore", str_strip_whitespace=True)
 
 
+class CitationBook:
+    """Run-wide numbers for the passages a run is shown, so "[3]" names one passage
+    for the whole run: a later search that finds the same chunk gives it the same
+    number, and a new chunk gets the next one."""
+
+    def __init__(self) -> None:
+        self._numbers: dict[Hashable, int] = {}
+        self._lock = threading.Lock()  # a timed-out tool may still be running
+
+    def number(self, key: Hashable) -> int:
+        with self._lock:
+            return self._numbers.setdefault(key, len(self._numbers) + 1)
+
+
 @dataclass(frozen=True)
 class ToolContext:
-    """What a handler may use. Business tools read `settings.business_db_file`."""
+    """What a handler may use. Business tools read `settings.business_db_file`;
+    `search_documents` needs `documents` (None: the tool says the library is
+    unavailable) and numbers its passages in `citations`."""
 
     settings: Settings
+    documents: "DocumentLibrary | None" = None
+    citations: CitationBook = field(default_factory=CitationBook)
+
+    def for_new_run(self) -> "ToolContext":
+        """The same context with its own passage numbers; the loop calls this."""
+        return replace(self, citations=CitationBook())
 
 
-Handler = Callable[[Any, ToolContext], dict[str, Any]]
+@dataclass(frozen=True)
+class ToolOutput:
+    """A handler's result with provenance: `content` is shown to the model, `meta`
+    is only stored in the trace."""
+
+    content: dict[str, Any]
+    meta: dict[str, Any] = field(default_factory=dict)
+
+
+Handler = Callable[[Any, ToolContext], "dict[str, Any] | ToolOutput"]
 
 
 @dataclass(frozen=True)
@@ -73,13 +112,14 @@ class Tool:
 @dataclass(frozen=True)
 class ToolResult:
     """What a call returned. `content` is shown to the model (and stored verbatim
-    in the trace, invariant 11) as `to_message()`."""
+    in the trace, invariant 11) as `to_message()`; `meta` is stored, never shown."""
 
     name: str
     arguments: dict[str, Any]
     ok: bool
     content: dict[str, Any] = field(default_factory=dict)
     error: str | None = None
+    meta: dict[str, Any] = field(default_factory=dict)
 
     def to_message(self) -> str:
         payload = self.content if self.ok else {"error": self.error}
@@ -131,10 +171,12 @@ class ToolRegistry:
             return ToolResult(name, raw, ok=False, error=_validation_message(exc))
 
         try:
-            content = tool.handler(args, ctx)
+            output = tool.handler(args, ctx)
         except ToolError as exc:
             return ToolResult(name, raw, ok=False, error=str(exc))
-        return ToolResult(name, raw, ok=True, content=content)
+        if isinstance(output, ToolOutput):
+            return ToolResult(name, raw, ok=True, content=output.content, meta=output.meta)
+        return ToolResult(name, raw, ok=True, content=output)
 
 
 # ------------------------------------------------------------------ schemas
