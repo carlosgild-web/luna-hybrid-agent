@@ -1,7 +1,7 @@
 import { AlertTriangle, Bot, CheckCircle2, ChevronDown, ChevronRight, Globe, Wrench, XCircle } from "lucide-react";
 import { type ReactNode, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
-import type { AgentChecks, AgentTrace, AgentTraceStep, Source } from "@/api/types";
+import type { AgentChecks, AgentNumberClaim, AgentTrace, AgentTraceStep, Source } from "@/api/types";
 import { AgentCharts } from "@/components/agent/AgentCharts";
 import { formatMs } from "@/components/agent/AgentSteps";
 import { toolLabel } from "@/components/agent/labels";
@@ -322,7 +322,13 @@ function RowsTable({ rows }: { rows: unknown[] }) {
         <thead className="bg-muted">
           <tr>
             {columns.map((c) => (
-              <th key={c} className="px-2 py-1.5 text-left font-medium">
+              <th
+                key={c}
+                className={cn(
+                  "px-2 py-1.5 font-medium",
+                  records.every((r) => typeof r[c] === "number" || r[c] == null) ? "text-right" : "text-left",
+                )}
+              >
                 {c}
               </th>
             ))}
@@ -390,9 +396,12 @@ function Checks({ checks }: { checks: AgentChecks }) {
               </tr>
             </thead>
             <tbody>
-              {checks.numbers.map((claim, i) => (
-                <tr key={`${i}-${claim.text}`} className="border-b last:border-0">
-                  <td className="py-1.5 pr-4 font-mono tabular-nums">{claim.text}</td>
+              {groupClaims(checks.numbers).map(({ claim, count }) => (
+                <tr key={`${claim.text}-${claim.sources.join()}`} className="border-b last:border-0">
+                  <td className="py-1.5 pr-4 font-mono tabular-nums">
+                    {claim.text}
+                    {count > 1 && <span className="ml-1.5 font-sans text-xs text-muted-foreground">×{count}</span>}
+                  </td>
                   <td className="py-1.5">
                     {claim.sources.length ? (
                       claim.sources.join(", ")
@@ -426,6 +435,18 @@ function Checks({ checks }: { checks: AgentChecks }) {
 }
 
 // ------------------------------------------------------------------ helpers
+
+/** The same number traced to the same tools, said several times, is one row. */
+function groupClaims(claims: AgentNumberClaim[]): { claim: AgentNumberClaim; count: number }[] {
+  const rows = new Map<string, { claim: AgentNumberClaim; count: number }>();
+  for (const claim of claims) {
+    const key = `${claim.text}|${claim.sources.join(",")}`;
+    const row = rows.get(key);
+    if (row) row.count += 1;
+    else rows.set(key, { claim, count: 1 });
+  }
+  return [...rows.values()];
+}
 
 function Facts({ items }: { items: [string, ReactNode][] }) {
   return (

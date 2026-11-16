@@ -7,14 +7,15 @@ import { cn } from "@/lib/utils";
 // "[1]" or "[1, 3]" not followed by "(" (so real markdown links stay links).
 const CITATION = /\[(\d+(?:\s*,\s*\d+)*)\](?!\()/g;
 
-/** Turns citation markers into links that the renderer shows as chips. */
-export function linkCitations(text: string): string {
-  return text.replace(CITATION, (_, numbers: string) =>
-    numbers
-      .split(",")
-      .map((n) => `[${n.trim()}](#cite-${n.trim()})`)
-      .join(""),
-  );
+/** Turns citation markers into links that the renderer shows as chips. A bracket of
+ * bigger numbers that aren't sources ("[1200, 1500]", a data array) stays text, as in
+ * the agent's answer check (decision 0039). */
+export function linkCitations(text: string, known: ReadonlySet<number> = new Set()): string {
+  return text.replace(CITATION, (group: string, numbers: string) => {
+    const parts = numbers.split(",").map((n) => n.trim());
+    if (!parts.every((n) => known.has(Number(n)) || n.length <= 2)) return group;
+    return parts.map((n) => `[${n}](#cite-${n})`).join("");
+  });
 }
 
 export function CitedAnswer({
@@ -62,7 +63,7 @@ export function CitedAnswer({
           },
         }}
       >
-        {linkCitations(content)}
+        {linkCitations(content, known)}
       </Markdown>
     </div>
   );
