@@ -171,6 +171,17 @@ def test_the_citation_rules_come_with_the_tool():
     assert "passage number" not in system_prompt(today)
 
 
+def test_luna_is_told_to_search_before_saying_the_documents_lack_it():
+    """Run 1 of the agent eval: 6 of 7 document questions got "I don't have that"
+    without a search (decision 0040)."""
+    import datetime as dt
+
+    prompt = system_prompt(dt.date(2026, 11, 16), documents=True)
+    assert "call search_documents first" in prompt
+    assert "Never say the documents don't have something" in prompt
+    assert "search_documents first" not in system_prompt(dt.date(2026, 11, 16))
+
+
 # ------------------------------------------------------------ the hybrid run
 
 

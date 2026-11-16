@@ -48,6 +48,10 @@ _NUMBER = re.compile(rf"(?<![\w.,])(?<!\w-)\d+(?:{_SEPARATOR}\d+)*(?!\w|-\w)(\s?
 # In tool results every digit run counts, codes and dates included.
 _ANY_NUMBER = re.compile(rf"\d+(?:{_SEPARATOR}\d+)*")
 _DIGITS = re.compile(r"\d+")
+# "1 MXN = 0.054 USD": the 1 is the unit of a rate, not a claim (agent eval run 2).
+_UNIT_OF_RATE = re.compile(r"(?<![\w.,])1\s?(?:MXN|USD|US\$|\$|peso|dollar|d[oó]lar)\s?=", re.I)
+# A citation marker and the space before it, for removing it.
+_CITATION_WITH_SPACE = re.compile(r"\s*\[\d{1,2}(?:\s*,\s*\d{1,2})*\]")
 
 
 @dataclass
@@ -89,6 +93,37 @@ def check_answer(trace: AgentTrace, today: dt.date | None = None) -> AnswerCheck
         for text, values in _claims(trace.answer, passages)
     ]
     return AnswerCheck(status, cited, sources, numbers, _charts(trace))
+
+
+def drop_unbacked_citations(trace: AgentTrace) -> list[str]:
+    """In a run that showed no passages, every [n] in the answer points at nothing:
+    a small model tags database facts that way (agent eval run 2: 6 of 30 answers).
+    Removes those markers from `trace.answer` and returns them. The model's own text
+    stays in its LLM step (invariant 11). A run that did show passages keeps every
+    marker, so a wrong number there is still reported as invalid."""
+    if shown_passages(trace):
+        return []
+    removed = [m.group(0).strip() for m in _CITATION_WITH_SPACE.finditer(trace.answer)]
+    if removed:
+        trace.answer = _CITATION_WITH_SPACE.sub("", trace.answer).strip()
+    return removed
+
+
+def states_value(answer: str, value: Decimal) -> bool:
+    """Whether `answer` writes `value`, at the precision it chose: "519,726" and
+    "519.725,51" both state 519725.51, "60%" states 59.8 (the agent evaluation)."""
+    return any(
+        _rounds_to(value, reading) for _, readings_ in _claims(answer, {}) for reading in readings_
+    )
+
+
+def tools_with_value(trace: AgentTrace, value: Decimal) -> list[str]:
+    """The tool results (and passages) of `trace` that contain `value`."""
+    return [
+        label
+        for label, ev in _evidence(trace, None)
+        if label != "question" and ev.supports(str(value), {value})
+    ]
 
 
 def _charts(trace: AgentTrace) -> list[dict[str, Any]]:
@@ -167,6 +202,7 @@ def _claims(answer: str, passages: Mapping[int, Any]) -> list[tuple[str, set[Dec
         lambda m: " " if _is_citation(m.group(0), passages) else m.group(0), answer
     )
     text = _LIST_MARKER.sub("", without_citations)
+    text = _UNIT_OF_RATE.sub(" =", text)
     claims: list[tuple[str, set[Decimal]]] = []
     for date in _ISO_DATE.findall(text):
         claims.append((date, set()))

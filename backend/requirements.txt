@@ -22,3 +22,7 @@ python-multipart>=0.0.33
 
 # Phase 6 (watched folders):
 watchdog>=7.1.0
+
+# Hybrid Phase 7 (agent evaluation suite, agent_questions.yaml). Already installed
+# with uvicorn[standard] and chromadb; listed because the app now imports it.
+pyyaml>=6.0.3

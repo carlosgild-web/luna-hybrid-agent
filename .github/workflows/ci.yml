@@ -38,6 +38,13 @@ jobs:
         run: |
           pytest -q --cov --cov-report=term --cov-report=markdown:coverage.md
           { echo "## Backend coverage"; echo; cat coverage.md; } >> "$GITHUB_STEP_SUMMARY"
+      # The 30-question agent suite with the scripted model (decision 0040): fails
+      # if a case fails, and puts the metrics table in the run summary.
+      - name: Agent evaluation (fakes)
+        shell: bash  # -o pipefail, so a failing case fails the step through tee
+        run: |
+          python -m app.cli agent-eval --fake | tee agent-eval.txt
+          { echo "## Agent evaluation (scripted model)"; echo; sed -n '/^| Metric/,$p' agent-eval.txt; } >> "$GITHUB_STEP_SUMMARY"
 
   frontend:
     runs-on: ubuntu-latest
