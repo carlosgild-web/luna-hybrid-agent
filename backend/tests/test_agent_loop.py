@@ -15,6 +15,7 @@ from pydantic import Field
 from app import cli
 from app.agent.business_seed import seed_business_db
 from app.agent.loop import (
+    EMPTY_REPLY,
     FINAL_CALL,
     NO_ANSWER,
     AgentLimits,
@@ -237,7 +238,7 @@ def test_a_second_failure_in_a_row_stops_offering_tools(ctx):
     assert trace.answer == "I couldn't echo that."
     final = llm.chat_calls[-1]
     assert final["tools"] == []
-    assert final["messages"][-1] == {"role": "system", "content": FINAL_CALL}
+    assert final["messages"][-1] == {"role": "user", "content": FINAL_CALL}
     assert trace.steps[-1].tools_offered is False
 
 
@@ -267,6 +268,24 @@ def test_a_model_failure_ends_the_run_with_its_error(ctx):
     assert trace.error == "ConnectError: refused"
     assert trace.answer == ""
     assert kinds(trace) == ["llm", "tool"]
+
+
+def test_an_empty_reply_is_retried_once_with_a_nudge(ctx):
+    llm = FakeLLMClient(turns=[turn(tokens=(1118, 24)), turn(call("echo", text="a")), answer()])
+    trace = run(llm, ctx)
+    assert kinds(trace) == ["llm", "llm", "tool", "llm"]
+    retry = llm.chat_calls[1]
+    assert retry["messages"][-1] == {"role": "user", "content": EMPTY_REPLY}
+    assert [m["role"] for m in retry["messages"]] == ["system", "user", "user"]
+    assert retry["tools"], "the retry still offers the tools"
+    assert trace.status == "answered" and trace.answer == "Done."
+
+
+def test_a_second_empty_reply_ends_the_run(ctx):
+    llm = FakeLLMClient(turns=[turn(), turn(call("echo", text="a")), turn()])
+    trace = run(llm, ctx)
+    assert (trace.status, trace.answer) == ("answered", NO_ANSWER)
+    assert trace.iterations == 3
 
 
 # ------------------------------------------------------------------- limits

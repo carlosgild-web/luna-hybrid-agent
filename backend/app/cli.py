@@ -142,6 +142,8 @@ def _print_step(step) -> None:
             )
             note = " (written as text)" if step.parsed_from_content else ""
             what = f"calls {calls}{note}"
+        elif not step.content.strip():
+            what = "empty reply"
         else:
             what = "answers" if step.tools_offered else "answers (no tools offered)"
         print(f"[{step.iteration}] model {step.ms} ms, {tokens}: {what}", flush=True)

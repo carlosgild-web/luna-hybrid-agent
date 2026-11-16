@@ -4,7 +4,8 @@ One run is a bounded conversation with the model on Ollama's `tools` API:
 
 1. The model gets the system prompt, the question and the tool declarations.
 2. Each turn it either answers in text (the run ends) or asks for tool calls; the loop
-   runs them, each in a worker thread with a timeout, and sends the results back.
+   runs them, each in a worker thread with a timeout, and sends the results back. An
+   empty reply is retried once.
 3. A limit ends the tool phase: AGENT_MAX_ITERATIONS model calls, AGENT_TOKEN_BUDGET
    tokens, or the same tool failing twice in a row. Then one last call, with no tools
    offered, answers from what the run has so far.
@@ -50,6 +51,10 @@ FINAL_CALL = (
     "don't contain what the question needs, say what is missing. Use only numbers that "
     "appear in the tool results."
 )
+
+# Ollama 0.40 sometimes drops a tool call its parser can't read and returns neither text
+# nor calls (seen with qwen2.5:3b). The same prompt fails again, so the retry adds this.
+EMPTY_REPLY = "Your last reply was empty. Call one of the tools, or answer the question in text."
 
 NO_ANSWER = (
     "I couldn't put an answer together within the agent's limits. "
@@ -128,6 +133,7 @@ class _Run:
         self.results: dict[str, ToolResult] = {}  # same call -> same result
         self.last_call_failed: dict[str, bool] = {}  # per tool name
         self.stop: Status | None = None  # why tools are no longer offered
+        self.retried_empty = False
 
     def execute(self, question: str, today: dt.date) -> None:
         self.messages = [
@@ -141,7 +147,9 @@ class _Run:
                 self.stop = "max_iterations"
             final = self.stop is not None
             if final:
-                self.messages.append({"role": "system", "content": FINAL_CALL})
+                # As the user: chat templates such as qwen2.5's render only the first
+                # system message, at the top.
+                self.messages.append({"role": "user", "content": FINAL_CALL})
 
             turn, ms = self._chat(final)
             if turn is None:
@@ -164,6 +172,11 @@ class _Run:
                     parsed_from_content=parsed,
                 )
             )
+
+            if not final and not calls and not turn.content.strip() and not self.retried_empty:
+                self.retried_empty = True  # once per run; the empty turn isn't sent back
+                self.messages.append({"role": "user", "content": EMPTY_REPLY})
+                continue
 
             if final or not calls:
                 # A final turn that still asks for tools has no answer to show.
