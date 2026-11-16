@@ -4,6 +4,7 @@ Usage:
     python -m app.cli ingest <path>
     python -m app.cli ask "<question>"
     python -m app.cli seed-demo [path]
+    python -m app.cli seed-business-db [path]
     python -m app.cli eval [--set NAME] [--mode hybrid|vector|keyword] [--answers] [--judge]
     python -m app.cli eval-compare <run a> <run b>
     python -m app.cli set-password [--stdin]
@@ -101,6 +102,24 @@ def cmd_seed_demo(args: argparse.Namespace) -> int:
     ingested = sum(item.status == "ingested" for item in results)
     print(f"\n{ingested} ingested, {len(results) - ingested} skipped")
     print("Open the employee portal at /intranet and ask Luna.")
+    return 0
+
+
+def cmd_seed_business_db(args: argparse.Namespace) -> int:
+    """Builds the demo company's business database (seeded, the same every time)."""
+    from app.agent.business_seed import seed_business_db
+
+    path = Path(args.path) if args.path else get_settings().business_db_file
+    existed = path.exists()
+    summary = seed_business_db(path)
+    print(f"{'replaced' if existed else 'created'}  {summary.path}")
+    for table, count in summary.row_counts.items():
+        print(f"  {table:<18} {count:>5} rows")
+    print("\nQ3 2026, to check against the Q3 sales meeting notes:")
+    print(f"  revenue    {summary.q3_revenue_mxn:,.0f} MXN (notes: about 512,800)")
+    print(f"  wholesale  {summary.q3_wholesale_pct}% of revenue (notes: about 61%)")
+    for sku in ("CH-2004", "GB-1014"):
+        print(f"  {sku}    {summary.q3_units[sku]:,} units")
     return 0
 
 
@@ -355,6 +374,15 @@ def main(argv: list[str] | None = None) -> int:
     )
     seed_parser.add_argument("path", nargs="?", help="Demo folder (default: demo/hilda-luna)")
     seed_parser.set_defaults(func=cmd_seed_demo)
+
+    business_parser = subparsers.add_parser(
+        "seed-business-db",
+        help="Create the demo company's business database (replaces it; the same every time)",
+    )
+    business_parser.add_argument(
+        "path", nargs="?", help="Database file (default: BUSINESS_DB_PATH or DATA_DIR/business)"
+    )
+    business_parser.set_defaults(func=cmd_seed_business_db)
 
     backup_parser = subparsers.add_parser("backup", help="Back up the data (app stopped)")
     backup_parser.add_argument("--force", action="store_true", help="even if the app seems to run")

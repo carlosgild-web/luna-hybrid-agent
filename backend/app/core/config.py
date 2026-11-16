@@ -19,6 +19,9 @@ class Settings(BaseSettings):
 
     # Paths
     data_dir: Path = Path("./data")
+    # The demo company's business database, read-only for the agent (decision 0033).
+    # Empty = DATA_DIR/business/hilda_luna.db; `python -m app.cli seed-business-db` creates it.
+    business_db_path: Path | None = None
     # Built frontend; empty = backend/static, then ../frontend/dist (none = API only)
     static_dir: Path | None = None
 
@@ -96,6 +99,10 @@ class Settings(BaseSettings):
     @property
     def db_path(self) -> Path:
         return self.data_dir / "app.db"
+
+    @property
+    def business_db_file(self) -> Path:
+        return self.business_db_path or self.data_dir / "business" / "hilda_luna.db"
 
     @property
     def watch_root_paths(self) -> list[Path]:

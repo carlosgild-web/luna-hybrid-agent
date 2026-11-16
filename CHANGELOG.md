@@ -8,6 +8,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Ver
 
 - **Phase 0, the new repo.** `luna-hybrid-agent` starts from `local-rag-ollama` (v1.0.1 plus the CodeQL fix below) as one baseline commit. Added the plan ([PLAN_HYBRID.md](PLAN_HYBRID.md)), the agent invariants in `CLAUDE.md`, and [decision 0032](docs/decisions/0032-no-agent-framework.md): why there's no LangChain or LlamaIndex.
 
+- **Phase 1, the business database.** `python -m app.cli seed-business-db` builds the demo company's business data in `DATA_DIR/business/hilda_luna.db` (or `BUSINESS_DB_PATH`): 13 products, inventory, 68 customers, 937 orders from January to 14 November 2026, suppliers and their purchases. It is the same every time, and it agrees with the Q3 sales meeting notes (CH-2004: 4,120 units; GB-1014: 3,340; GB-1027 down 22% from Q2), so the agent's SQL answers can be checked against the documents. The agent opens it read-only in three layers; every kind of write raises ([decision 0033](docs/decisions/0033-business-db-generator-in-backend.md)).
+
 ### Changed
 
 - The app is now called **Luna Hybrid Agent** (API title, browser tab, console sidebar). The README is a short stub until Phase 8 rewrites it.
