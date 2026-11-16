@@ -67,13 +67,49 @@ laptop has 7.2 GB of RAM:
 | `qwen3:4b` | Right call after 417 thinking tokens (126 s). The second call's thinking ran past 300 s. |
 | `qwen2.5:3b` | Empty reply, retried. Then the right call and a correct answer with the tool's numbers: 3 model calls, 3,838 tokens, 42 s. |
 
-The phase is accepted on `qwen2.5:3b`. `qwen2.5:7b` remains the recommendation
-for machines with 16 GB, where it fits in memory. `AGENT_MODEL` picks the model.
+### Choosing a model for 8 GB
+
+The 3B model passed, so two more small tool-calling models from Hugging Face were
+compared with it. Each got three questions: the restock question, "¿Cuánto vendimos en
+el tercer trimestre de 2026 y qué porcentaje fue mayoreo?" (expected 519,725.51 MXN,
+59.8% wholesale) and "How many units of CH-2004 do we have in stock?" (1,900). They ran
+on the same laptop, at temperature 0, one model loaded at a time.
+
+| | `qwen2.5:3b` | `qwen3:4b-instruct-2507-q4_K_M` | `granite4:micro` |
+|---|---|---|---|
+| RAM when loaded | 2.4 GB | 3.9 GB | 2.9 GB |
+| Restock | right | right | right |
+| Q3 sales, wholesale share | wrong: grouped by quarter, then said "100% wholesale" | right: `group_by: channel`, 519,725.51 MXN, 59.8% | wrong: grouped by quarter, then said "100% of the year" |
+| CH-2004 stock (English) | right | right | wrong: "1 unit" |
+| Calls dropped by Ollama | 1 (rescued by the retry) | 0 | 0 |
+| Total time | 93 s | 128 s | 106 s |
+
+All three models chose the right tool every time. The two wrong sales answers made up
+a number the tool result didn't contain, which breaks invariant 12. `granite4:micro`
+also writes SKUs with a non-breaking hyphen (U+2011), so they no longer match exactly.
+
+**The phase is accepted on `qwen3:4b-instruct-2507-q4_K_M`**. It is the non-thinking
+2507 release of Qwen3-4B, Apache 2.0, with BFCL-v3 61.9 on its model card against 57.6
+for Qwen3-4B without thinking. On the restock question it called `check_inventory` on
+the first try and named the three SKUs correctly: 2 model calls, 2,874 tokens, 94 s
+with the model loaded cold.
+
+The model recommendation is now:
+
+- **8 GB of RAM:** `qwen3:4b-instruct-2507-q4_K_M`. It is about 40% slower than
+  `qwen2.5:3b`, but it was the only one of the three that kept its numbers to the
+  tool results.
+- **16 GB:** `qwen2.5:7b` stays the recommendation, as in the plan.
+
+`AGENT_MODEL` picks the model, and its default is still `CHAT_MODEL`. One run per question
+shows a trend but isn't an evaluation. Phase 4's numeric-claim check is what catches
+made-up figures.
 
 ## Consequences
 
 - An agent answer can be rebuilt from its row in `agent_traces`. Each tool step stores
   the exact string the model was shown (invariant 11).
-- The empty-reply retry works around an Ollama bug. If a later Ollama parses these
-  calls, the retry stops triggering and nothing else changes.
+- The empty-reply retry works around an Ollama bug, seen only with `qwen2.5:3b` so far.
+  It stays as a safety net. If a later Ollama parses these calls, the retry stops
+  triggering and nothing else changes.
 - Streaming the steps over SSE and checking numeric claims come later (Phases 4 and 6).
