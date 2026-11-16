@@ -164,6 +164,10 @@ def _print_checks(checks: dict) -> None:
     for claim in checks["numbers"]:
         origin = ", ".join(claim["sources"]) or "NOT FOUND IN ANY TOOL RESULT"
         print(f"  {claim['text']:<14} <- {origin}")
+    for chart in checks.get("charts", []):
+        missing = chart["unsupported_values"]
+        verdict = f"NOT IN ANY TOOL RESULT: {missing}" if missing else "all from tool results"
+        print(f"Chart {chart['chart_id']}: {chart['values']} values, {verdict}")
     print()
 
 

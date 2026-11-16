@@ -12,6 +12,9 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 
 from app import __version__
 from app.api.routes import (
+    agent as agent_routes,
+)
+from app.api.routes import (
     auth as auth_routes,
 )
 from app.api.routes import (
@@ -170,6 +173,7 @@ def create_app(runtime: Runtime | None = None, *, start_worker: bool = True) -> 
         eval_routes,
         glossary_routes,
         watched,
+        agent_routes,
     ):
         api.include_router(module.router)
     app.include_router(api)

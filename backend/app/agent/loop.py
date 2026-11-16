@@ -41,7 +41,7 @@ sells beaded jewelry. You answer questions about the business with the tools you
 Rules:
 - Every number in your answer (stock, units, money, dates, percentages) must come from a \
 tool result in this conversation. Never use numbers from memory and never estimate.
-- {when}
+- {when}{extra}
 - If a tool returns an error, read it, fix the arguments and try once more.
 - If the tools don't have what the question asks, say so plainly instead of guessing.
 - Answer in the language of the question. Be brief and name products with their SKU.
@@ -64,6 +64,15 @@ call several tools.
 get no number: say they come from the database (the sales records, the inventory).
 - If a document and the database disagree, say so and give both figures."""
 
+# Phase 5: added when fx_rate / make_chart are offered.
+FX_RULE = """
+- For an exchange rate, or to convert between USD and MXN, call fx_rate (with amount to \
+convert) instead of doing the arithmetic. If its source is "stored", say that the rate is \
+the one stored in the company's books, not today's market rate."""
+CHART_RULE = """
+- Call make_chart only when the user asks for a chart or a graph, after the tool that has \
+the numbers, and copy its values exactly."""
+
 FINAL_CALL = (
     "Stop calling tools now. Answer the question with the tool results above. If they "
     "don't contain what the question needs, say what is missing. Use only numbers that "
@@ -82,6 +91,8 @@ NO_ANSWER = (
 OnStep = Callable[[Step], None]
 
 DOCUMENTS_TOOL = "search_documents"
+FX_TOOL = "fx_rate"
+CHART_TOOL = "make_chart"
 
 
 @dataclass(frozen=True)
@@ -107,12 +118,27 @@ class AgentLimits:
         )
 
 
-def system_prompt(today: dt.date, *, documents: bool = False) -> str:
-    """`documents`: search_documents is offered, so add the citation rules."""
+def system_prompt(
+    today: dt.date, *, documents: bool = False, fx: bool = False, charts: bool = False
+) -> str:
+    """Each flag says a tool is offered and adds its rules: `documents` the citation
+    rules, `fx` the stored-rate disclosure, `charts` when to draw one."""
     return SYSTEM_PROMPT.format(
         today=today.isoformat(),
         tools=HYBRID_TOOLS if documents else "",
         when=HYBRID_WHEN if documents else WHEN_DATABASE_ONLY,
+        extra=(FX_RULE if fx else "") + (CHART_RULE if charts else ""),
+    )
+
+
+def prompt_for(registry: ToolRegistry, today: dt.date) -> str:
+    """The system prompt for the tools `registry` offers."""
+    names = registry.names
+    return system_prompt(
+        today,
+        documents=DOCUMENTS_TOOL in names,
+        fx=FX_TOOL in names,
+        charts=CHART_TOOL in names,
     )
 
 
@@ -167,7 +193,7 @@ class _Run:
         self.messages = [
             {
                 "role": "system",
-                "content": system_prompt(today, documents=DOCUMENTS_TOOL in self.registry.names),
+                "content": prompt_for(self.registry, today),
             },
             {"role": "user", "content": question},
         ]
