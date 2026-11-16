@@ -372,6 +372,38 @@ class ChatIn(BaseModel):
     answer_language: Literal["en", "es"] | None = None
 
 
+class AgentChatIn(BaseModel):
+    """A question for the agent (Phase 6). Each question is one run: the agent
+    doesn't see the session's earlier turns (decision 0039)."""
+
+    model_config = ConfigDict(
+        json_schema_extra={"examples": [{"question": "Which SKUs are below reorder level?"}]}
+    )
+
+    question: str = Field(min_length=1, max_length=4000)
+    session_id: int | None = None
+    channel: Channel = "admin"
+
+
+class AgentTraceOut(BaseModel):
+    """One stored agent run: every step, with tool results verbatim (invariant 11)."""
+
+    id: int
+    question: str
+    model: str
+    status: str
+    answer: str
+    error: str | None
+    iterations: int
+    prompt_tokens: int
+    completion_tokens: int
+    duration_ms: int
+    created_at: UtcDatetime
+    checks: dict[str, Any] | None
+    steps: list[dict[str, Any]]
+    charts: list[dict[str, Any]]
+
+
 class ChunkDetail(BaseModel):
     """One passage, for showing what a citation points at."""
 
@@ -445,6 +477,7 @@ class MessageOut(BaseModel):
     feedback: FeedbackOut | None
     # Assistant messages: ok / missing / invalid / not_applicable (retrieval.citations)
     citation_status: str | None = None
+    agent_trace_id: int | None = None  # set on agent answers (Phase 6)
 
 
 class SessionOut(BaseModel):

@@ -82,10 +82,15 @@ def add_message(
     *,
     rag_profile_id: int | None = None,
     sources: list[SourceRef] | None = None,
+    agent_trace_id: int | None = None,
 ) -> Message:
     get_session(db, session_id)
     message = Message(
-        session_id=session_id, role=role, content=content, rag_profile_id=rag_profile_id
+        session_id=session_id,
+        role=role,
+        content=content,
+        rag_profile_id=rag_profile_id,
+        agent_trace_id=agent_trace_id,
     )
     db.add(message)
     db.flush()

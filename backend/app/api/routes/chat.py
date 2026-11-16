@@ -326,6 +326,7 @@ def get_session(db: DbDep, session_id: int):
                     if m.role == "assistant"
                     else None
                 ),
+                agent_trace_id=m.agent_trace_id,
             )
             for m in messages
         ],

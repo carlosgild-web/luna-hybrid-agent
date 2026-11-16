@@ -173,6 +173,8 @@ class Message(Base):
     role: Mapped[str]
     content: Mapped[str] = mapped_column(Text)
     rag_profile_id: Mapped[int | None] = mapped_column(ForeignKey("rag_profiles.id"), default=None)
+    # Agent answers (Phase 6): the stored run the inspector rebuilds the answer from.
+    agent_trace_id: Mapped[int | None] = mapped_column(ForeignKey("agent_traces.id"), default=None)
     created_at: Mapped[dt.datetime] = mapped_column(default=utcnow)
 
     session: Mapped["ChatSession"] = relationship(back_populates="messages")
@@ -343,7 +345,8 @@ class AgentTraceRecord(Base):
     """One agent run (invariant 8): the question, every model turn and tool call in
     `steps` (tool results verbatim, invariant 11), the answer, and `checks`, its
     citation and number check (decision 0036). Saved through
-    `versioning/agent_traces.py`. Phase 6 links chat messages to it."""
+    `versioning/agent_traces.py`; an agent chat answer points to it with
+    `Message.agent_trace_id`."""
 
     __tablename__ = "agent_traces"
 
