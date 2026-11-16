@@ -27,6 +27,7 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 from app.core.config import Settings
 
 if TYPE_CHECKING:
+    from app.agent.tools.external import FxRates
     from app.retrieval.library import DocumentLibrary
 
 _NAME = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
@@ -46,7 +47,7 @@ class ToolArgs(BaseModel):
 class CitationBook:
     """Run-wide numbers for the passages a run is shown, so "[3]" names one passage
     for the whole run: a later search that finds the same chunk gives it the same
-    number, and a new chunk gets the next one."""
+    number, and a new chunk gets the next one. Charts are numbered the same way."""
 
     def __init__(self) -> None:
         self._numbers: dict[Hashable, int] = {}
@@ -61,15 +62,19 @@ class CitationBook:
 class ToolContext:
     """What a handler may use. Business tools read `settings.business_db_file`;
     `search_documents` needs `documents` (None: the tool says the library is
-    unavailable) and numbers its passages in `citations`."""
+    unavailable) and numbers its passages in `citations`. `fx_rate` asks `fx` for
+    live rates (None: the process-wide client built from settings); `make_chart`
+    numbers its charts in `charts`."""
 
     settings: Settings
     documents: "DocumentLibrary | None" = None
     citations: CitationBook = field(default_factory=CitationBook)
+    fx: "FxRates | None" = None
+    charts: CitationBook = field(default_factory=CitationBook)
 
     def for_new_run(self) -> "ToolContext":
-        """The same context with its own passage numbers; the loop calls this."""
-        return replace(self, citations=CitationBook())
+        """The same context with its own passage and chart numbers; the loop calls this."""
+        return replace(self, citations=CitationBook(), charts=CitationBook())
 
 
 @dataclass(frozen=True)
