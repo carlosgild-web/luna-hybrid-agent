@@ -35,7 +35,7 @@ cases:
     tools: [search_documents]
     forbid: [check_inventory, sales_report, supplier_purchases, sql_select]
     facts: [["30 days", "thirty days"]]
-    sources: [09-shipping-returns-policy.md]
+    sources: [09-shipping-returns-policy.md, 08-customer-faq.txt]  # the FAQ says it too
     fake:
       - [search_documents, {query: return unused beads days refund, shelf: operations}]
       - "Unused beads can be returned within 30 days of delivery {cite:09-shipping-returns-policy.md}."

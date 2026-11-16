@@ -382,3 +382,71 @@ def test_run_agent_is_what_the_suite_runs(runtime):
         today=SUITE.today,
     )
     assert score_case(case, trace).passed
+
+
+# ------------------------------------------------------------------ fixes from the real runs
+
+
+def test_a_citation_on_a_database_fact_is_removed_by_the_loop(runtime):
+    """Run 2's new worst failure: "[1]" after database facts, with no search made."""
+    case = variant(
+        "db-wholesale-share",
+        [
+            "sales_report",
+            {"date_from": "2026-07-01", "date_to": "2026-09-30", "group_by": "channel"},
+        ],
+        "59.8% of Q3 2026 revenue came from wholesale. [1]",
+    )
+    traces = []
+    (result,) = run(runtime, [case], save=traces.append)
+    assert result.passed, result.failures
+    assert traces[0].answer == "59.8% of Q3 2026 revenue came from wholesale."
+    assert traces[0].checks["removed_citations"] == ["[1]"]
+    llm_text = [s.content for s in traces[0].steps if not isinstance(s, ToolStep)][-1]
+    assert llm_text.endswith("[1]")  # the model's own text stays in the trace
+
+
+def test_a_stored_trace_loads_back_as_the_same_run(runtime):
+    from app.versioning.agent_traces import load_trace, save_trace
+
+    saved = []
+
+    def save(trace):
+        with runtime.session_factory() as db:
+            save_trace(db, trace)
+        saved.append(trace)
+
+    (result,) = run(runtime, [CASES["hyb-ch2004"]], save=save)
+    with runtime.session_factory() as db:
+        loaded = load_trace(db, result.trace_id)
+    assert loaded.steps_as_dicts() == saved[0].steps_as_dicts()
+    assert score_case(CASES["hyb-ch2004"], loaded).to_dict() == result.to_dict()
+
+
+def test_rescore_scores_the_stored_traces_with_the_current_suite(runtime, tmp_path, monkeypatch):
+    from app.versioning.agent_traces import save_trace
+
+    def save(trace):
+        with runtime.session_factory() as db:
+            save_trace(db, trace)
+
+    wrong_source = variant(  # a right answer from a file the old case didn't list
+        "doc-returns",
+        [
+            "search_documents",
+            {"query": "return policy unused beads 30 days", "shelf": "customer-support"},
+        ],
+        "Unused beads can be returned within 30 days {cite:08-customer-faq.txt}.",
+        sources=["09-shipping-returns-policy.md"],
+    )
+    results = run(runtime, [wrong_source], save=save)
+    assert results[0].failures == ["cites 08-customer-faq.txt"]
+    path = agent_runner.write_report(report(results, "old"), tmp_path)
+
+    monkeypatch.setattr(cli, "build_runtime", lambda _settings: runtime)
+    assert cli.main(["agent-eval-rescore", str(path), "--out", str(tmp_path / "new")]) == 0
+    (new,) = (tmp_path / "new").glob("*.json")
+    rescored = agent_runner.load_report(new)
+    assert rescored["label"] == "old (rescored)"
+    assert rescored["cases"][0]["passed"] is True  # the suite now lists the FAQ
+    assert rescored["config"]["rescored_from"] == path.name

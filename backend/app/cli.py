@@ -10,11 +10,13 @@ Usage:
     python -m app.cli eval-compare <run a> <run b>
     python -m app.cli agent-eval [--fake] [--tier T] [--case ID] [--judge] [--label L]
     python -m app.cli agent-eval-compare <report.json> <report.json> ...
+    python -m app.cli agent-eval-rescore <report.json>
     python -m app.cli set-password [--stdin]
     python -m app.cli clear-password
 """
 
 import argparse
+import datetime as dt
 import json
 import sys
 from pathlib import Path
@@ -413,6 +415,54 @@ def cmd_agent_eval(args: argparse.Namespace) -> int:
     return 1 if args.fake and report["metrics"]["passed"] < len(results) else 0
 
 
+def cmd_agent_eval_rescore(args: argparse.Namespace) -> int:
+    """Scores a report's stored traces again with the current suite and answer check,
+    without asking the model anything: for a corrected case or a fixed check."""
+    from app.agent.answer import check_answer
+    from app.agent.loop import AgentLimits
+    from app.eval import agent_runner, agent_suite
+    from app.versioning.agent_traces import load_trace
+
+    source = agent_runner.load_report(Path(args.report))
+    suite = agent_suite.load_suite(Path(args.suite) if args.suite else agent_suite.SUITE_PATH)
+    cases = {case.id: case for case in suite.cases}
+    runtime = build_runtime(get_settings())
+    results = []
+    with runtime.session_factory() as db:
+        for old in source["cases"]:
+            if old["id"] not in cases or old.get("trace_id") is None:
+                print(f"  skipped {old['id']} (not in the suite, or no stored trace)")
+                continue
+            trace = load_trace(db, old["trace_id"])
+            if trace.status != "llm_error":
+                removed = (trace.checks or {}).get("removed_citations")
+                trace.checks = check_answer(trace, suite.today).to_dict()
+                if removed:
+                    trace.checks["removed_citations"] = removed
+            results.append(agent_suite.score_case(cases[old["id"]], trace))
+    config = source["config"]
+    limits = AgentLimits(
+        max_iterations=config["max_iterations"],
+        token_budget=config["token_budget"],
+        temperature=config["temperature"],
+        num_ctx=config["num_ctx"],
+    )
+    report = agent_runner.build_report(
+        results,
+        label=args.label or f"{source['label']} (rescored)",
+        model=config["model"],
+        limits=limits,
+        started_at=dt.datetime.fromisoformat(source["started_at"]),
+        fake=config["fake"],
+        judge_model=None,
+    )
+    report["config"]["rescored_from"] = Path(args.report).name
+    print(agent_suite.metrics_table([source, report]))
+    out = Path(args.out) if args.out else Path(args.report).parent
+    print(f"\nreport: {agent_runner.write_report(report, out)}")
+    return 0
+
+
 def cmd_agent_eval_compare(args: argparse.Namespace) -> int:
     """Two or more agent-eval reports side by side, then the cases that changed."""
     from app.eval import agent_runner, agent_suite
@@ -693,6 +743,16 @@ def main(argv: list[str] | None = None) -> int:
         "--force", action="store_true", help="even if the app seems to run"
     )
     agent_eval_parser.set_defaults(func=cmd_agent_eval)
+
+    agent_rescore_parser = subparsers.add_parser(
+        "agent-eval-rescore",
+        help="Score a report's stored traces again with the current suite (no model calls)",
+    )
+    agent_rescore_parser.add_argument("report", help="Report file (JSON)")
+    agent_rescore_parser.add_argument("--label", help="Label of the new report")
+    agent_rescore_parser.add_argument("--suite", help="Another suite file (YAML)")
+    agent_rescore_parser.add_argument("--out", help="Report folder (default: the report's)")
+    agent_rescore_parser.set_defaults(func=cmd_agent_eval_rescore)
 
     agent_compare_parser = subparsers.add_parser(
         "agent-eval-compare", help="Agent-eval reports side by side, and the cases that changed"

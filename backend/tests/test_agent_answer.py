@@ -7,7 +7,7 @@ from decimal import Decimal
 
 import pytest
 
-from app.agent.answer import check_answer, readings, shown_passages
+from app.agent.answer import check_answer, drop_unbacked_citations, readings, shown_passages
 from app.agent.trace import AgentTrace, ToolStep
 
 TODAY = dt.date(2026, 11, 16)
@@ -201,3 +201,42 @@ def test_a_small_wrong_citation_is_still_a_citation():
     result = check("Stock is low [7].", tool("check_inventory", INVENTORY), documents((1, NOTES)))
     assert result.citation_status == "invalid"
     assert result.unsupported == []
+
+
+# ------------------------------------------------- found by the agent eval (0040)
+
+
+def test_the_one_of_a_rate_is_a_unit_not_a_claim():
+    """Run 2: "18.5 (1 MXN = 0.054054 USD)" flagged the 1 as unsupported."""
+    fx = tool("fx_rate", {"rate": 18.5, "usd_per_mxn": 0.054054})
+    for answer in ("The rate is 18.5 (1 MXN = 0.054054 USD).", "1 USD = 18.5 MXN."):
+        assert check(answer, fx).unsupported == []
+    assert check("You get 1 discount.", fx).unsupported == ["1"]
+
+
+def test_citations_in_a_run_without_passages_are_removed():
+    """Run 2: "59.8% of Q3 revenue came from wholesale. [1]" with no search made."""
+    trace = AgentTrace(
+        question="?",
+        model="fake",
+        steps=[tool("sales_report", SALES)],
+        answer="Wholesale was 59.8% [1], retail the rest [1, 2].",
+    )
+    assert drop_unbacked_citations(trace) == ["[1]", "[1, 2]"]
+    assert trace.answer == "Wholesale was 59.8%, retail the rest."
+    assert check_answer(trace, TODAY).citation_status == "not_applicable"
+
+
+def test_citations_stay_when_passages_were_shown():
+    answer = "It sold 4,120 units [3]."
+    trace = AgentTrace(question="?", model="fake", steps=[documents((1, NOTES))], answer=answer)
+    assert drop_unbacked_citations(trace) == []
+    assert trace.answer == answer  # still reported as invalid
+
+
+def test_a_data_array_is_not_a_citation_to_remove():
+    answer = "Monthly units: [1200, 1500, 1420]."
+    trace = AgentTrace(
+        question="?", model="fake", steps=[tool("sales_report", SALES)], answer=answer
+    )
+    assert drop_unbacked_citations(trace) == []

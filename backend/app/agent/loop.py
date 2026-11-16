@@ -26,7 +26,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from app.agent.answer import check_answer
+from app.agent.answer import check_answer, drop_unbacked_citations
 from app.agent.registry import ToolContext, ToolRegistry, ToolResult
 from app.agent.trace import AgentTrace, LLMStep, Status, Step, ToolStep
 from app.core.config import Settings
@@ -169,7 +169,10 @@ def run_agent(
     finally:
         run.trace.duration_ms = _ms_since(started)
     if run.trace.status != "llm_error":
+        removed = drop_unbacked_citations(run.trace)
         run.trace.checks = check_answer(run.trace, today).to_dict()
+        if removed:
+            run.trace.checks["removed_citations"] = removed
     return run.trace
 
 

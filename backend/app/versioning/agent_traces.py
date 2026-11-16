@@ -13,7 +13,7 @@ is the source of rank 3, as in a RAG answer.
 from sqlalchemy.orm import Session
 
 from app.agent.answer import shown_passages
-from app.agent.trace import AgentTrace, ToolStep
+from app.agent.trace import AgentTrace, LLMStep, ToolStep
 from app.db.models import AgentTraceRecord, Message
 from app.versioning import history
 from app.versioning.history import SourceRef
@@ -79,6 +79,28 @@ def get_trace(db: Session, trace_id: int) -> AgentTraceRecord:
     if row is None:
         raise NotFoundError(f"agent trace {trace_id} not found")
     return row
+
+
+def load_trace(db: Session, trace_id: int) -> AgentTrace:
+    """A stored run as the `AgentTrace` the loop made, so it can be checked and
+    scored again (the agent evaluation's rescore)."""
+    row = get_trace(db, trace_id)
+    trace = AgentTrace(
+        question=row.question,
+        model=row.model,
+        started_at=row.created_at,
+        status=row.status,
+        answer=row.answer,
+        error=row.error,
+        duration_ms=row.duration_ms,
+        checks=row.checks,
+        id=row.id,
+    )
+    for raw in row.steps:
+        step = dict(raw)
+        kind = step.pop("kind")
+        trace.steps.append(LLMStep(**step) if kind == "llm" else ToolStep(**step))
+    return trace
 
 
 def _describe(step: ToolStep) -> str:
