@@ -42,10 +42,14 @@ Checking that path turned up three gaps:
   scripts download `web-dist.zip` from this repo's releases.
 - **The Ollama image is pinned** to `ollama/ollama:0.40.16`, the version the agent
   evaluation ran on, instead of `latest`.
-- **The demo video is recorded by hand** from a shot script
-  ([`docs/showcase/video-script.md`](../showcase/video-script.md)), as v1.0.1's was. A real
-  run on the laptop needs the other apps closed, and the person recording picks the
-  takes. The README links it once it exists.
+- **The demo video follows a shot script**
+  ([`docs/showcase/video-script.md`](../showcase/video-script.md)). It was recorded on
+  the 7.2 GB laptop with a fresh data dir and `qwen3:4b-instruct-2507`. A headless Chrome
+  was driven over the DevTools protocol and its screencast frames were cut with ffmpeg, not
+  a screen recorder, so the frames are a clean 1280 × 800 without the desktop. Every answer
+  is a real first take. Model waits play faster, each with its factor on screen (× 16 to
+  × 40: the hybrid answer took 6 minutes), and typing plays at × 3. No answer text is
+  edited.
 - **Cross-links:** this README says "built on local-rag-ollama", and one line in that
   repo's README points here. That repo gets no other change and no release.
 

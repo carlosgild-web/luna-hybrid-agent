@@ -15,7 +15,7 @@ every step and names the source of every number. Everything runs on your machine
 > (portfolio project #1, v1.0.1): the document library, versions, hybrid search, cited
 > chat and the demo company all come from there. This repo adds the agent on top.
 
-<!-- Demo video: recorded from docs/showcase/video-script.md, linked here when it exists. -->
+[![Watch the tour: a hybrid question end to end, with the agent inspector](docs/showcase/img/agent-demo-play.jpg)](docs/showcase/demo-agent.mp4)
 
 ```text
 You:  Do CH-2004's Q3 sales match what the Q3 meeting notes say?
@@ -34,6 +34,10 @@ That's a real answer from the evaluation (run 3, `qwen3:4b-instruct-2507` on a l
 CPU, 3½ minutes). The 4,120 comes from a SQL aggregate and from a passage, and the answer
 check traced both. The **agent inspector** opens the stored run: each model call and tool
 call, the arguments, the rows exactly as the model saw them, tokens and timings.
+
+| | |
+|---|---|
+| ![Luna's hybrid answer with its steps and citation](docs/showcase/img/40-agent-chat.jpg) **Steps as they happen.** Each tool call, then the cited answer. | ![The agent inspector](docs/showcase/img/41-agent-inspector.jpg) **The agent inspector.** The run rebuilt from its trace, rows and all. |
 
 ## Try it
 
