@@ -1,22 +1,33 @@
 # Demo mode: a reviewer with only Docker runs the whole demo with small models.
 #   docker compose -f compose.yaml -f compose.demo.yaml up -d
-# A one-off `models` container pulls bge-m3 and qwen2.5:3b (about 3 GB, once;
-# they stay in the ollama_models volume), then the app starts with them.
-# Open http://localhost:8000 and click "Load the demo company" (decision 0031).
+# A one-off `models` container pulls bge-m3, qwen2.5:3b for the documents chat
+# and qwen3:4b-instruct-2507 for Luna's agent (about 5.6 GB, once; they stay in
+# the ollama_models volume), then the app starts with them. Open
+# http://localhost:8000 and click "Load the demo company": it loads the documents
+# and the business database (decisions 0031 and 0041).
 #
-# qwen2.5:3b is the model behind the README's evaluation numbers. Both models
-# need about 4 GB inside Docker's VM, which gets half the RAM by default, so
-# plan on a machine with about 16 GB (decision 0031). For another model, set DEMO_CHAT_MODEL
-# (e.g. DEMO_CHAT_MODEL=llama3.2:3b in a .env file next to this one).
+# qwen2.5:3b is the model behind the RAG evaluation numbers, qwen3:4b-instruct
+# the one behind the agent evaluation (decision 0040). Ollama keeps one model
+# loaded at a time here, so each needs about 3-4 GB inside Docker's VM, which
+# gets half the RAM by default: plan on a machine with about 16 GB. For other
+# models, set DEMO_CHAT_MODEL or DEMO_AGENT_MODEL (e.g. DEMO_CHAT_MODEL=llama3.2:3b
+# in a .env file next to this one).
 services:
+  ollama:
+    environment:
+      # Swap models instead of paging: the agent's runs finish within the timeout
+      # this way on a small machine (decision 0040).
+      OLLAMA_MAX_LOADED_MODELS: "1"
+
   models:
-    image: ollama/ollama:latest
+    image: ollama/ollama:0.40.16 # the same as compose.yaml's ollama service
     environment:
       OLLAMA_HOST: http://ollama:11434 # the CLI talks to the ollama service
       DEMO_CHAT_MODEL: ${DEMO_CHAT_MODEL:-qwen2.5:3b}
+      DEMO_AGENT_MODEL: ${DEMO_AGENT_MODEL:-qwen3:4b-instruct-2507-q4_K_M}
     entrypoint: ["/bin/sh", "-c"]
     # $$ keeps Compose from expanding it: the container's shell reads the variable.
-    command: ['ollama pull bge-m3 && ollama pull "$$DEMO_CHAT_MODEL"']
+    command: ['ollama pull bge-m3 && ollama pull "$$DEMO_CHAT_MODEL" && ollama pull "$$DEMO_AGENT_MODEL"']
     depends_on:
       ollama:
         condition: service_healthy
@@ -25,6 +36,7 @@ services:
   app:
     environment:
       CHAT_MODEL: ${DEMO_CHAT_MODEL:-qwen2.5:3b}
+      AGENT_MODEL: ${DEMO_AGENT_MODEL:-qwen3:4b-instruct-2507-q4_K_M}
       EMBEDDING_MODEL: bge-m3
     depends_on:
       models:

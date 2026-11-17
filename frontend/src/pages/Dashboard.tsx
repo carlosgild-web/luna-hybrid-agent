@@ -208,7 +208,7 @@ function DemoCard({ onTroubleshoot }: { onTroubleshoot: () => void }) {
     setStartedHere(true);
     seed.mutate();
   };
-  const result = job?.result as { ingested?: number; skipped?: number } | null;
+  const result = job?.result as { ingested?: number; skipped?: number; business_db_created?: boolean } | null;
 
   return (
     <Card className="border-primary/40 bg-primary/5">
@@ -218,8 +218,8 @@ function DemoCard({ onTroubleshoot }: { onTroubleshoot: () => void }) {
           <CardTitle>{done ? "The demo company is loaded" : "New here? Load the demo company"}</CardTitle>
           <CardDescription>
             {done
-              ? `${result?.ingested ?? 0} documents indexed${result?.skipped ? `, ${result.skipped} already there` : ""}. Open the company's website, sign in as an employee and ask Luna.`
-              : "Hilda & Luna Beadworks is a fictional bead maker with 11 documents: a handbook, safety training, a catalog, prices, an FAQ and more. Look through them first if you like; loading them takes a few minutes on a laptop."}
+              ? `${result?.ingested ?? 0} documents indexed${result?.skipped ? `, ${result.skipped} already there` : ""}${result?.business_db_created ? ", and the business data (stock, sales, purchases) is ready" : ""}. Open the company's website, sign in as an employee and ask Luna.`
+              : "Hilda & Luna Beadworks is a fictional bead maker with 11 documents (a handbook, safety training, a catalog, prices, an FAQ and more) and a business database of stock, sales and purchases. Look through the documents first if you like; loading them takes a few minutes on a laptop."}
           </CardDescription>
         </div>
       </CardHeader>

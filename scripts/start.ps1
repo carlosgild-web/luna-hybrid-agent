@@ -25,10 +25,12 @@ $Root = Split-Path $PSScriptRoot -Parent
 $EnvFile = Join-Path $Root ".env"
 $DataDir = Join-Path $Root "data"
 $LogFile = Join-Path $DataDir "start.log"
-$Repo = "carlosgild-web/local-rag-ollama"
+$Repo = "carlosgild-web/luna-hybrid-agent"
 $OllamaUrl = "http://127.0.0.1:11434"
 $EmbeddingModel = "bge-m3"
-$ModelSizes = @{ "bge-m3" = "1.2 GB"; "qwen2.5:3b" = "1.9 GB"; "llama3.1" = "4.9 GB" }
+# Luna's agent model (decision 0035): the best tool caller of the small models tested.
+$AgentModel = "qwen3:4b-instruct-2507-q4_K_M"
+$ModelSizes = @{ "bge-m3" = "1.2 GB"; "qwen2.5:3b" = "1.9 GB"; "llama3.1" = "4.9 GB"; "qwen3:4b-instruct-2507-q4_K_M" = "2.5 GB" }
 $script:Logging = $false
 $script:OllamaStartedHere = $false
 
@@ -150,7 +152,7 @@ function Read-Settings {
 
 function Save-Settings([hashtable]$s) {
     $lines = @("# Written by start.cmd / start.sh. Docker Compose reads it too. Safe to delete.")
-    foreach ($key in "START_ROUTE", "CHAT_MODEL", "EMBEDDING_MODEL", "APP_PORT") {
+    foreach ($key in "START_ROUTE", "CHAT_MODEL", "AGENT_MODEL", "EMBEDDING_MODEL", "APP_PORT") {
         if ($s.ContainsKey($key)) { $lines += "$key=$($s[$key])" }
     }
     Set-Content -Path $EnvFile -Value $lines -Encoding ASCII
@@ -422,6 +424,7 @@ function Start-RouteC([string]$VenvPy, [hashtable]$s) {
     New-Item -ItemType Directory -Force -Path $DataDir | Out-Null
     $env:DATA_DIR = $DataDir
     $env:CHAT_MODEL = $s.CHAT_MODEL
+    $env:AGENT_MODEL = $s.AGENT_MODEL
     $env:EMBEDDING_MODEL = $s.EMBEDDING_MODEL
     $env:OLLAMA_BASE_URL = $OllamaUrl
     $log = Join-Path $DataDir "server.log"
@@ -608,7 +611,7 @@ function Explain-Check([string]$OllamaState, [hashtable]$Docker, [hashtable]$s, 
             Info "Without Docker: route C (Python), installing Ollama and Python first if needed, after asking."
         }
     }
-    Info "Chat model: $(if ($s.CHAT_MODEL) { $s.CHAT_MODEL } else { $Suggested }); embedding model: $EmbeddingModel"
+    Info "Chat model: $(if ($s.CHAT_MODEL) { $s.CHAT_MODEL } else { $Suggested }); agent model: $(if ($s.AGENT_MODEL) { $s.AGENT_MODEL } else { $AgentModel }); embedding model: $EmbeddingModel"
     Say ""; Say "--check: nothing was changed."
 }
 
@@ -732,8 +735,9 @@ function Do-Start {
         $hostModels = if ($route -ne "A") { Ollama-Models } else { @() }
         $s.CHAT_MODEL = Choose-ChatModel $suggested $hostModels
     }
+    if (-not $s.AGENT_MODEL) { $s.AGENT_MODEL = $AgentModel }
     $s.EMBEDDING_MODEL = $EmbeddingModel
-    Info "Chat model: $($s.CHAT_MODEL); embedding model: $EmbeddingModel"
+    Info "Chat model: $($s.CHAT_MODEL); agent model: $($s.AGENT_MODEL); embedding model: $EmbeddingModel"
 
     if (-not (PortFree $port)) {
         $free = 8001..8010 | Where-Object { PortFree $_ } | Select-Object -First 1
@@ -747,7 +751,7 @@ function Do-Start {
 
     if ($route -ne "A") {
         $installed = Ollama-Models
-        foreach ($m in @($EmbeddingModel, $s.CHAT_MODEL)) {
+        foreach ($m in @($EmbeddingModel, $s.CHAT_MODEL, $s.AGENT_MODEL | Select-Object -Unique)) {
             if (Has-Model $installed $m) { Ok "$m is already downloaded" }
             elseif (Ask "Download $m$(Size $m) into Ollama now?") {
                 & ollama pull $m
@@ -771,7 +775,7 @@ function Do-Start {
             Fail "Docker couldn't start the containers; the reason is in the messages above."
         }
         if ($route -eq "A") {
-            foreach ($m in @($EmbeddingModel, $s.CHAT_MODEL)) { Pull-InDocker $m }
+            foreach ($m in @($EmbeddingModel, $s.CHAT_MODEL, $s.AGENT_MODEL | Select-Object -Unique)) { Pull-InDocker $m }
         }
     }
     if (-not (Wait-Healthy $port)) {

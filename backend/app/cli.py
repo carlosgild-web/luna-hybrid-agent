@@ -26,7 +26,7 @@ from app.core.runtime import build_runtime
 from app.retrieval.prompt import NOT_FOUND_PHRASE, format_sources
 from app.retrieval.qa import prepare_context
 from app.versioning import service
-from app.versioning.demo import DEMO_DIR, seed_demo
+from app.versioning.demo import DEMO_DIR, ensure_business_db, seed_demo
 
 
 def cmd_ingest(args: argparse.Namespace) -> int:
@@ -93,6 +93,8 @@ def cmd_seed_demo(args: argparse.Namespace) -> int:
     """Loads the fictional Hilda & Luna Beadworks corpus, one shelf per folder."""
     runtime = build_runtime(get_settings())
     with runtime.session_factory() as db:
+        if ensure_business_db(db, runtime.settings):
+            print(f"created   the business database  {runtime.settings.business_db_file}")
         results = seed_demo(
             db,
             settings=runtime.settings,

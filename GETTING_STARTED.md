@@ -1,22 +1,20 @@
 # Getting started
 
-Set up the app, load the demo company, and try everything it does, step by step. It takes about 15 minutes, plus the model download.
-
-> Prefer a web page? The same guide is at **[carlosgild-web.github.io/local-rag-ollama/getting-started.html](https://carlosgild-web.github.io/local-rag-ollama/getting-started.html)**.
+Set up the app, load the demo company, ask Luna questions that need documents, business data or both, and open the agent inspector, step by step. It takes about 15 minutes, plus the model download.
 
 ## 1. What you need
 
 | | |
 |---|---|
 | **Memory** | 8 GB of RAM at least; 16 GB is comfortable. On 8 GB, use the small chat model (`qwen2.5:3b`), with Ollama installed on the computer: running Ollama inside Docker needs about 16 GB, because Docker gets only part of the memory. |
-| **Disk** | About 4 GB for the small models (`qwen2.5:3b` and `bge-m3`), or 7 GB with `llama3.1`. |
+| **Disk** | About 6 GB for the small models (`qwen2.5:3b` for the documents chat, `qwen3:4b-instruct-2507` for Luna's agent, `bge-m3` for search), or 9 GB with `llama3.1`. |
 | **Software** | [Docker Desktop](https://www.docker.com/products/docker-desktop/), or [Ollama](https://ollama.com) and Python 3.11+. The start script in step 2 finds what you have and offers to install Ollama or Python if they're missing. Node 22 is only needed to build the web app yourself. |
 
 No GPU or internet connection is needed after the models are downloaded, and nothing you upload ever leaves your computer.
 
 ```bash
-git clone https://github.com/carlosgild-web/local-rag-ollama.git
-cd local-rag-ollama
+git clone https://github.com/carlosgild-web/luna-hybrid-agent.git
+cd luna-hybrid-agent
 ```
 
 ## 2. Start the app
@@ -41,7 +39,7 @@ It looks at your computer, then asks a few questions the first time:
 
    With **C**, the built web app is downloaded from the GitHub Release and checked against its SHA-256, so you don't need Node.
 3. **When something is installed but not running,** it starts it for you: the Ollama app, or Docker Desktop. If that doesn't work, it tells you why and lets you **wait/retry**, choose another way, or **quit**. It never switches to another way without asking.
-4. **Which chat model:** it lists the ones your Ollama already has, and downloads only what's missing, after asking.
+4. **Which chat model:** it lists the ones your Ollama already has, and downloads only what's missing, after asking. Luna's agent uses `qwen3:4b-instruct-2507-q4_K_M` (saved as `AGENT_MODEL` in `.env`), the best tool caller of the small models tested ([decision 0035](docs/decisions/0035-agent-loop.md)).
 5. **It starts the app**, waits until it's healthy, and opens it: the **dashboard** while the library is empty (step 4), the website after that. It ends by saying how it's running, for example "Running in Docker (route B)", with the container names.
 
 It never installs anything without asking, and it shows the exact command first. If port 8000 is taken, it uses the next free one and tells you. Your answers are saved in `.env`, so the next run starts straight away, and each run is logged to `data/start.log`.
@@ -60,7 +58,7 @@ It never installs anything without asking, and it shows the exact command first.
 
 ### A. Docker, everything in containers (easiest)
 
-**Just the demo, with small models:** one command pulls `bge-m3` and `qwen2.5:3b` (about 3 GB the first time) and starts everything. It needs about 16 GB of RAM (see **Memory** above); on 8 GB, use the start script or way C.
+**Just the demo, with small models:** one command pulls `bge-m3`, `qwen2.5:3b` and `qwen3:4b-instruct-2507` (about 5.6 GB the first time) and starts everything. It needs about 16 GB of RAM (see **Memory** above); on 8 GB, use the start script or way C.
 
 ```bash
 docker compose -f compose.yaml -f compose.demo.yaml up -d
@@ -74,6 +72,7 @@ Wait until `docker compose ps` shows `app` running (the first time, the download
 docker compose up -d
 docker compose exec ollama ollama pull bge-m3
 docker compose exec ollama ollama pull llama3.1
+docker compose exec ollama ollama pull qwen3:4b-instruct-2507-q4_K_M   # Luna's agent
 ```
 
 On a machine with 8 GB of RAM, use the small chat model instead:
@@ -82,6 +81,7 @@ On a machine with 8 GB of RAM, use the small chat model instead:
 CHAT_MODEL=qwen2.5:3b docker compose up -d
 docker compose exec ollama ollama pull bge-m3
 docker compose exec ollama ollama pull qwen2.5:3b
+docker compose exec ollama ollama pull qwen3:4b-instruct-2507-q4_K_M
 ```
 
 In Windows PowerShell, set the variable first: `$env:CHAT_MODEL="qwen2.5:3b"; docker compose up -d`.
@@ -95,6 +95,7 @@ Way A works even if Ollama is already installed on your computer: the container'
 ```bash
 ollama pull bge-m3
 ollama pull llama3.1          # or qwen2.5:3b, then start with CHAT_MODEL=qwen2.5:3b
+ollama pull qwen3:4b-instruct-2507-q4_K_M
 docker compose -f compose.yaml -f compose.host-ollama.yaml up -d
 ```
 
@@ -103,6 +104,7 @@ docker compose -f compose.yaml -f compose.host-ollama.yaml up -d
 ```bash
 ollama pull bge-m3
 ollama pull llama3.1          # or qwen2.5:3b, with CHAT_MODEL=qwen2.5:3b set below
+ollama pull qwen3:4b-instruct-2507-q4_K_M   # set AGENT_MODEL to it below
 
 cd frontend && npm ci && npm run build            # build the web app first
 cd ../backend
@@ -111,7 +113,7 @@ python -m venv .venv
 .venv/Scripts/python -m uvicorn app.main:app --port 8000
 ```
 
-Settings are environment variables, such as `CHAT_MODEL`, `OLLAMA_BASE_URL` and `DATA_DIR`. See [`backend/.env.example`](backend/.env.example).
+Settings are environment variables, such as `CHAT_MODEL`, `AGENT_MODEL`, `OLLAMA_BASE_URL` and `DATA_DIR`. See [`backend/.env.example`](backend/.env.example).
 
 ## 3. Check that it's running
 
@@ -123,12 +125,12 @@ If something is red, click **Troubleshoot**. It names the cause and the fix, for
 
 ## 4. Load the demo company
 
-Hilda & Luna Beadworks is a fictional bead maker with 11 documents: a handbook, safety training, a catalog, a price sheet, an FAQ and more.
+Hilda & Luna Beadworks is a fictional bead maker with 11 documents (a handbook, safety training, a catalog, a price sheet, an FAQ and more) and a business database: 13 products, their stock, 937 orders from January to November 2026, suppliers and purchases.
 
 While the library is empty, the **dashboard** shows a *New here?* card:
 
 1. **See the documents** lists the 11 originals by the shelf each goes into. PDFs and text files open in a new tab, and Word files download, so you can read exactly what the assistant will answer from. They're also in your copy of the project, in `backend/demo/hilda-luna/`.
-2. **Load the demo company** indexes them, with a progress bar. It takes a few minutes on a laptop.
+2. **Load the demo company** indexes them, with a progress bar, and builds the business database if there is none. It takes a few minutes on a laptop.
 3. When it's done, the card links to the company website and the employee portal.
 
 It creates four shelves (customer-support, hr, meetings, operations). Loading again skips every file as a duplicate. Later, every document in the **Library** has an *Open original* button.
@@ -140,7 +142,7 @@ docker compose exec app python -m app.cli seed-demo                 # in Docker
 cd backend && .venv/Scripts/python -m app.cli seed-demo             # without Docker
 ```
 
-It ends with `11 ingested, 0 skipped`.
+It ends with `11 ingested, 0 skipped`. `python -m app.cli seed-business-db` rebuilds the business database on its own (in `DATA_DIR/business/hilda_luna.db`).
 </details>
 
 ## 5. Take the tour
@@ -161,11 +163,15 @@ It ends with `11 ingested, 0 skipped`.
 
 ![Luna's answer with its source](docs/showcase/img/27-luna-source.jpg)
 
-**⑤ Open the RAG admin console** from the banner. Under **Collections**, turn a shelf's **Visible in the employee portal** switch off, and Luna stops using it.
+**⑤ Ask a question that needs the business data**, like "Which products need restocking?", or one that needs both, like "Do CH-2004's Q3 sales match what the Q3 meeting notes say?". The portal's Luna answers with **Documents + business data** by default. Each tool she calls appears while she works ("Reading the sales records `sales_report` ✓"), and the answer cites the meeting notes. "Show me a bar chart of Q3 2026 revenue by month" draws a chart under the answer.
+
+**⑥ Open the agent inspector** with the link under the answer (or **Chat** → **Agent** in the console). It rebuilds the run from its stored trace: each model call and tool call, the arguments, the rows exactly as the model saw them, tokens and timings, and a check of every number in the answer against the tool results. Agent answers take about 1–3 minutes each on a laptop CPU.
+
+**⑦ Open the RAG admin console** from the banner. Under **Collections**, turn a shelf's **Visible in the employee portal** switch off, and Luna stops using it.
 
 ![Shelves with the portal switch](docs/showcase/img/29-collections-portal-switch.jpg)
 
-**⑥ Try your own documents.** In **Library**, drop a few files or a whole folder. The app suggests a shelf and tags for each one; you confirm, and they're indexed. Then ask about them in **Chat**.
+**⑧ Try your own documents.** In **Library**, drop a few files or a whole folder. The app suggests a shelf and tags for each one; you confirm, and they're indexed. Then ask about them in **Chat**.
 
 ![Suggested shelves and tags](docs/showcase/img/04-suggestions.jpg)
 
@@ -176,20 +182,21 @@ The [reviewer walkthrough](docs/walkthrough.md) goes through the same tour in mo
 ```bash
 cd backend
 .venv/Scripts/pip install -r requirements-dev.txt
-.venv/Scripts/python -m pytest -q                        # 189 tests, with fakes: no Ollama needed
+.venv/Scripts/python -m pytest -q                        # about 740 tests, with fakes: no Ollama needed
+.venv/Scripts/python -m app.cli agent-eval --fake         # the 30-question agent suite, scripted model
 .venv/Scripts/ruff check . && .venv/Scripts/ruff format --check .
 cd ../frontend && npm run build                          # type check and build
 ```
 
-The **end-to-end test** drives the running app with the real model, about 60 questions and every app mechanic. It takes 1–3 hours on a laptop CPU; see [`e2e/README.md`](e2e/README.md). CI runs the unit tests, the linters, the frontend build and a Docker build on every push.
+The **end-to-end test** drives the running app with the real model, about 60 questions and every app mechanic. It takes 1–3 hours on a laptop CPU; see [`e2e/README.md`](e2e/README.md). CI runs the unit tests, the agent suite with the scripted model, the linters, the frontend build and a Docker build on every push. `python -m app.cli agent-eval` runs the same 30 questions on Ollama (about 50 minutes on a laptop, with the app stopped; see [decision 0040](docs/decisions/0040-agent-evaluation.md)).
 
 ## 7. If something goes wrong
 
 | Problem | What to do |
 |---|---|
 | "Ollama isn't running" | Start Ollama (way B or C), or check `docker compose ps` (way A). The troubleshooter shows the address it's trying. |
-| "Model not installed" | Run the `ollama pull` lines from step 2 for the models the app expects (`CHAT_MODEL`, `EMBEDDING_MODEL`). |
-| Answers are slow | That's normal on a CPU: 20–60 seconds an answer. Use `qwen2.5:3b` on smaller machines. |
+| "Model not installed" | Run the `ollama pull` lines from step 2 for the models the app expects (`CHAT_MODEL`, `AGENT_MODEL`, `EMBEDDING_MODEL`). |
+| Answers are slow | That's normal on a CPU: 20–60 seconds a documents answer, 1–3 minutes an agent answer (each tool call is another model round-trip). Use `qwen2.5:3b` for the documents chat on smaller machines, and close other apps: on 8 GB, Ollama has to swap models. |
 | Port 8000 is in use | The start script picks the next free port. By hand: set `APP_PORT=8001` before `docker compose up -d`. |
 | The start script chose the wrong way or model | Run it with `--reconfigure`, or delete `.env`. What happened is in `data/start.log`. |
 | Start over with no documents | Way A or B: `docker compose down -v` (**deletes** the app's data and the downloaded models). Way C: delete `backend/data/`. |
