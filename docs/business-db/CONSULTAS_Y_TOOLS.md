@@ -1,5 +1,13 @@
 # hilda_luna.db — Esquema, consultas sugeridas y tools para Ollama
 
+*[English](QUERIES_AND_TOOLS.md) · Español*
+
+> **Registro de diseño, no la API actual.** Las tools de la sección 3 son las propuestas
+> originales; las que se construyeron (`check_inventory`, `sales_report`,
+> `supplier_purchases`, `sql_select`, `make_chart`) se describen en la
+> [decisión 0034](../decisions/0034-tool-registry-and-business-tools.md) y en la
+> [versión en inglés](QUERIES_AND_TOOLS.md).
+
 Base de datos SQLite de prueba para practicar **function calling con Ollama**
 sobre la empresa ficticia **Hilda & Luna Beadworks** (misma empresa de los
 documentos del sistema RAG, para poder cruzar respuestas SQL ↔ documentos).

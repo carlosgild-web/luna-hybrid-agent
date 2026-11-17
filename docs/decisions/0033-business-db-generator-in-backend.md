@@ -34,7 +34,8 @@ as a standalone file that writes `hilda_luna.db` next to itself.
   the data.
 - **No pre-built `.db` in the repo.** The database is derived data and takes a fraction
   of a second to build. The query and tool notes the script came with are kept as
-  [docs/business-db/CONSULTAS_Y_TOOLS.md](../business-db/CONSULTAS_Y_TOOLS.md).
+  [docs/business-db/QUERIES_AND_TOOLS.md](../business-db/QUERIES_AND_TOOLS.md)
+  (Spanish original: [CONSULTAS_Y_TOOLS.md](../business-db/CONSULTAS_Y_TOOLS.md)).
 
 ## Consequences
 
