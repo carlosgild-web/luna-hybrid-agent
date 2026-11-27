@@ -4,6 +4,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Ver
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-11-27
+
 Phase 9 of [PLAN_HYBRID.md](PLAN_HYBRID.md): the portfolio's showcase standard.
 
 ### Added
