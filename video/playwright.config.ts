@@ -1,0 +1,29 @@
+import { defineConfig } from '@playwright/test'
+
+/**
+ * The recorder drives the app that is already running; it never starts or stops it. The
+ * Ollama take uses `start.cmd video` (port 8010); the dry run uses the README GIF's harness
+ * (e2e/showcase/harness.py, port 8020: the scripted model). The page is the 1920x1080 stage,
+ * which hosts the real app in an iframe on the app's own origin.
+ */
+export default defineConfig({
+  testDir: '.',
+  testMatch: 'record.spec.ts',
+  outputDir: 'out/test-results',
+  fullyParallel: false,
+  workers: 1,
+  retries: 0,
+  timeout: 40 * 60_000,
+  // A model turn on a laptop CPU takes minutes.
+  expect: { timeout: 60_000 },
+  reporter: [['list']],
+  use: {
+    baseURL: process.env.BASE_URL || 'http://127.0.0.1:8010',
+    channel: process.env.VIDEO_BROWSER_CHANNEL || 'msedge',
+    viewport: { width: 1920, height: 1080 },
+    deviceScaleFactor: 1,
+    colorScheme: 'light',
+    locale: 'en-US',
+    actionTimeout: 90_000,
+  },
+})

@@ -40,3 +40,7 @@ Thumbs.db
 e2e/showcase/node_modules/
 e2e/showcase/.tmp/
 e2e/showcase/test-results/
+
+# The README video (video/): takes and dependencies
+video/out/
+video/node_modules/
