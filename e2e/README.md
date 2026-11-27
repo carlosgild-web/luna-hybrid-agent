@@ -53,3 +53,23 @@ cover what the model answers. They are reported as a pass rate, and each failure
 | `scenario.json` | Collections, questions with expected facts, grounding tests, edits, new documents |
 | `variants.py` | Builds edited copies (new versions) and new documents; the corpus is never modified |
 | `run_e2e.py` | The runner and report writer |
+
+## The README GIF and screenshots (`showcase/`)
+
+A separate Playwright project, not a test of the model: the real app and web UI on the agent
+suite's scripted model (decision 0042). It needs the backend venv, Node, Microsoft Edge and, for
+the GIF, ffmpeg. No Ollama.
+
+```bash
+cd e2e/showcase
+npm install
+npm run showcase       # builds the web app, writes docs/showcase/img/50-55-*.png
+npm run showcase:gif   # builds the web app, writes docs/showcase/demo.gif (~30 s, ~4 MB)
+```
+
+`harness.py` serves the app on port 8020 from a scratch folder (`e2e/showcase/.tmp/`). Each
+question is matched, word for word, to a case in `backend/app/eval/agent_questions.yaml`, and its
+`fake` run is replayed, with a 1.2 s pause per model turn (`E2E_STEP_DELAY_MS`) so the steps
+appear one by one. Embeddings are fake, so search ranks by its keyword half. Everything else is
+the real app: the agent loop, the registry's argument checks, the tools, the read-only business
+database, the SQL guard, the answer check and the stored trace.
