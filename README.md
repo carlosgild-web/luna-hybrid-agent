@@ -21,7 +21,7 @@ every step, and the app checks every number she writes. Everything runs on your 
 
 ### The 2½-minute video: a real model, under the hood
 
-VIDEO_URL
+https://github.com/user-attachments/assets/0fd91b84-9853-4ecf-94d7-a18cef77cb2a
 
 Five questions on `qwen3:4b-instruct` on a laptop CPU, with a panel that shows the code and
 the data behind every step; model waits are cut to 1 s with their real length. How it was
