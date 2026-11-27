@@ -796,6 +796,8 @@ do_video() {
   # One chat model for both chats, so only it and bge-m3 are ever loaded.
   CHAT_MODEL="$DEFAULT_AGENT_MODEL"; AGENT_MODEL="$DEFAULT_AGENT_MODEL"; APP_PORT="$port"
   export ALLOW_EXTERNAL_APIS=false
+  # A take's model call can outlast the default 300 s on a small laptop (decision 0042).
+  export OLLAMA_TIMEOUT_S=900
   start_route_c
   wait_healthy "$port" || fail "The app didn't become healthy; see data-video/server.log."
 

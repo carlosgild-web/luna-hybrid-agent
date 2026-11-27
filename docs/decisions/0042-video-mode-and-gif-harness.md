@@ -64,3 +64,13 @@ stream the chat reloads the session with `fetchQuery`, which returned the copy c
 answers on a warm model can be that fast too (a refusal). Fixed in `useChatStream.ts`
 (`staleTime: 0`). The frontend has no unit-test runner, so the check is the showcase run with
 `E2E_STEP_DELAY_MS=0`.
+
+## The Ollama timeout, now a setting
+
+The second Ollama take stopped in the hybrid question: the model call after the document
+search hit the client's fixed 300 s timeout (`ReadTimeout`). The search loads `bge-m3`,
+which unloads qwen3 (`OLLAMA_MAX_LOADED_MODELS=1`); qwen3 then reloads and reads a prompt
+with the passage and twelve sales rows, at about 15 prompt tokens per second, while the
+recorder shares the CPU. The timeout is now `OLLAMA_TIMEOUT_S` (default 300, unchanged),
+passed to both Ollama clients, and video mode sets 900. A real user on a laptop this small
+can raise it the same way (`.env.example`). Test: `test_the_ollama_timeout_comes_from_settings`.

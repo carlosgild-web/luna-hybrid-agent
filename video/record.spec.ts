@@ -28,8 +28,8 @@ import { cut, hasLocalPath, PATH_RE } from './payload.mjs'
 const HERE = dirname(fileURLToPath(import.meta.url))
 const STAGE = { width: 1920, height: 1080 }
 const TYPE_DELAY_MS = 40
-// A model turn on a laptop CPU: a few model calls of 20-90 s each, plus loading the model.
-const TURN_TIMEOUT_MS = 12 * 60_000
+// A model turn on a laptop CPU: two or three model calls of 2-5 min each (OLLAMA_TIMEOUT_S=900).
+const TURN_TIMEOUT_MS = 30 * 60_000
 // Generic rows (tool calls the storyboard did not foresee) shown at most; the others are
 // listed in take.json as skipped, so the video stays near its length.
 const MAX_GENERIC = Number(process.env.VIDEO_MAX_GENERIC ?? 2)
@@ -548,6 +548,8 @@ for (const [provider, tag] of [['ollama', '@ollama'], ['scripted', '@demo-dry']]
       await box.press('Enter')
       await until(conductor.waitTurn(), TURN_TIMEOUT_MS, `turn "${key}"`)
       await assertPainting(page, `after "${key}"`)
+      const error = [...conductor.events].reverse().find((e) => e.turn === key && e.type === 'error')
+      if (error) throw new Error(`turn "${key}" ended with an error: ${error.data?.detail}`)
       const model = conductor.traces[key]?.model
       if (board.models && !(model in board.models)) throw new Error(`the run used model "${model}", not one of the storyboard's models`)
       await expect(app.getByText('Inspect the run').last()).toBeVisible()

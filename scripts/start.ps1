@@ -855,6 +855,9 @@ function Do-Video {
     $s = @{ CHAT_MODEL = $AgentModel; AGENT_MODEL = $AgentModel; EMBEDDING_MODEL = $EmbeddingModel; APP_PORT = "$port" }
     # One chat model for both chats, so only it and bge-m3 are ever loaded.
     $env:ALLOW_EXTERNAL_APIS = "false"
+    # A take's model call can reload qwen3 (bge-m3 swaps it out) and read a long prompt while
+    # the recorder shares the CPU: over the default 300 s in the second take (decision 0042).
+    $env:OLLAMA_TIMEOUT_S = "900"
     Start-RouteC $venvPy $s
     if (-not (Wait-Healthy $port)) { Fail "The app didn't become healthy; see data-video\server.log." }
 
