@@ -428,6 +428,14 @@ async function loadApp(page: Page, path: string) {
   await page.evaluate((p) => (window as any).stage.loadApp(p), path)
 }
 
+/** The page still paints: an animation frame within 5 s (finding F9: a frozen take). */
+async function assertPainting(page: Page, where: string) {
+  const ok = await page.evaluate(
+    () => new Promise<boolean>((r) => { const t = setTimeout(() => r(false), 5000); requestAnimationFrame(() => { clearTimeout(t); r(true) }) }),
+  )
+  if (!ok) throw new Error(`${where}: the browser stopped painting (display off or out of memory?)`)
+}
+
 async function assertNoPaths(page: Page, where: string) {
   const text: string = await page.evaluate(() => (window as any).stage.appText())
   const hit = text.match(PATH_RE)
@@ -523,8 +531,10 @@ for (const [provider, tag] of [['ollama', '@ollama'], ['scripted', '@demo-dry']]
     let posterMs: number | null = null
 
     const box = app.getByPlaceholder('Type your question…')
+    page.on('crash', () => conductor.setFailure(new Error('the page crashed (out of memory?)')))
     /** One chat turn in a new conversation, so each answer is alone on screen. */
     const ask = async (key: string, fresh = true) => {
+      await assertPainting(page, `before "${key}"`)
       if (fresh) {
         await app.getByRole('button', { name: 'New conversation' }).click()
         await sleep(600)
@@ -537,6 +547,7 @@ for (const [provider, tag] of [['ollama', '@ollama'], ['scripted', '@demo-dry']]
       await typedRow
       await box.press('Enter')
       await until(conductor.waitTurn(), TURN_TIMEOUT_MS, `turn "${key}"`)
+      await assertPainting(page, `after "${key}"`)
       const model = conductor.traces[key]?.model
       if (board.models && !(model in board.models)) throw new Error(`the run used model "${model}", not one of the storyboard's models`)
       await expect(app.getByText('Inspect the run').last()).toBeVisible()

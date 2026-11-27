@@ -71,6 +71,7 @@ Three dry takes on the scripted model before the first Ollama take.
 | F6 | The previous scene's subtitle stayed on screen through "New conversation" and the typing | Tooling | The typed row comes up as the typing starts |
 | F7 | The README copy came out at 10.1 MB: two-pass x264 overshoots its target by about 6 % | Tooling | Target 8.5 MB (9.3 MB in the third dry take) |
 | F8 | The chart turn calls `sales_report` first, which the chart scene has no row for | Expected | One generic row (cap `VIDEO_MAX_GENERIC=2`) |
+| F9 | First Ollama take (L6): the model calls took 139-153 s each, and the browser stopped painting after ~170 s while JavaScript kept running; the next click timed out. An idle page alone kept painting (probe, 160 s): the display going off (Windows' native occlusion tracking) or memory pressure (3.1 GB free) | Tooling | Edge runs with `CalculateNativeWinOcclusion` off, the take script keeps the display on, and the take checks for an animation frame before and after every turn |
 
 Checked in every dry take: all 26 rows shown, 16 payloads equal the capture, the retrieval
 inspector's ranking equals the run's search, no local path in any payload or in the app's
