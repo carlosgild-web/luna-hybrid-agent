@@ -26,14 +26,13 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "backend"))
 
-import os  # noqa: E402
+import os
 
-import uvicorn  # noqa: E402
-
-from app.core.config import get_settings  # noqa: E402
-from app.core.runtime import build_runtime  # noqa: E402
-from app.llm.base import ChatTurn, LLMClient, ToolCall  # noqa: E402
-from app.main import create_app  # noqa: E402
+import uvicorn
+from app.core.config import get_settings
+from app.core.runtime import build_runtime
+from app.llm.base import ChatTurn, LLMClient, ToolCall
+from app.main import create_app
 
 SPEED = float(os.environ.get("VIDEO_REPLAY_SPEED", "1"))
 
@@ -47,10 +46,14 @@ class Replay(LLMClient):
         self.provider, self.model = "ollama-replay", model
         self.steps: list[dict[str, Any]] | None = None
 
-    def generate(self, prompt: str, *, temperature: float = 0.2, num_ctx: int = 8192) -> str:
+    def generate(
+        self, prompt: str, *, temperature: float = 0.2, num_ctx: int = 8192
+    ) -> str:
         raise RuntimeError("the replay only answers the agent's model calls")
 
-    def stream_generate(self, prompt: str, *, temperature: float = 0.2, num_ctx: int = 8192):
+    def stream_generate(
+        self, prompt: str, *, temperature: float = 0.2, num_ctx: int = 8192
+    ):
         raise RuntimeError("the replay only answers the agent's model calls")
 
     def chat_with_tools(
@@ -62,7 +65,9 @@ class Replay(LLMClient):
         num_ctx: int = 8192,
     ) -> ChatTurn:
         if self.steps is None:
-            question = next(m["content"] for m in messages if m["role"] == "user").strip()
+            question = next(
+                m["content"] for m in messages if m["role"] == "user"
+            ).strip()
             if question not in self.runs:
                 raise RuntimeError(f"pass 1 has no run for {question!r}")
             self.steps = list(self.runs[question])
@@ -90,8 +95,12 @@ def load_runs(pass1: Path) -> tuple[dict[str, list[dict[str, Any]]], str]:
         run = json.loads(path.read_text(encoding="utf-8"))
         trace = run.get("trace") or {}
         if trace.get("status") != "answered":
-            raise SystemExit(f"{path.name}: pass 1 did not answer ({trace.get('status')})")
-        runs[run["question"].strip()] = [s for s in trace["steps"] if s["kind"] == "llm"]
+            raise SystemExit(
+                f"{path.name}: pass 1 did not answer ({trace.get('status')})"
+            )
+        runs[run["question"].strip()] = [
+            s for s in trace["steps"] if s["kind"] == "llm"
+        ]
         models.add(trace["model"])
     if len(models) != 1:
         raise SystemExit(f"pass 1 used {sorted(models)}: expected one model")
@@ -100,17 +109,28 @@ def load_runs(pass1: Path) -> tuple[dict[str, list[dict[str, Any]]], str]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--pass1", default=str(Path(__file__).resolve().parent / "out" / "pass1"))
+    parser.add_argument(
+        "--pass1", default=str(Path(__file__).resolve().parent / "out" / "pass1")
+    )
     parser.add_argument("--port", type=int, default=8010)
     args = parser.parse_args()
     runs, model = load_runs(Path(args.pass1))
     settings = get_settings()
     if settings.agent_chat_model != model:
-        raise SystemExit(f"AGENT_MODEL is {settings.agent_chat_model}, pass 1 used {model}")
+        raise SystemExit(
+            f"AGENT_MODEL is {settings.agent_chat_model}, pass 1 used {model}"
+        )
     runtime = build_runtime(settings)
-    runtime = dataclasses.replace(runtime, llm_client_for=lambda _m: Replay(runs, model))
-    print(f"replaying {len(runs)} runs of {model} from {args.pass1} (speed {SPEED})", flush=True)
-    uvicorn.run(create_app(runtime), host="127.0.0.1", port=args.port, log_level="warning")
+    runtime = dataclasses.replace(
+        runtime, llm_client_for=lambda _m: Replay(runs, model)
+    )
+    print(
+        f"replaying {len(runs)} runs of {model} from {args.pass1} (speed {SPEED})",
+        flush=True,
+    )
+    uvicorn.run(
+        create_app(runtime), host="127.0.0.1", port=args.port, log_level="warning"
+    )
 
 
 if __name__ == "__main__":

@@ -17,7 +17,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "backend"))
 
-from app.agent.tools.sql_guard import UnsafeQueryError, check_select  # noqa: E402
+from app.agent.tools.sql_guard import UnsafeQueryError, check_select
 
 
 def guard(query: str) -> dict:

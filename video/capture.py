@@ -35,12 +35,33 @@ def ask(client: httpx.Client, question: str) -> dict:
                 kind = line[6:].strip()
             elif line.startswith("data:"):
                 data = json.loads(line[5:].strip())
-                events.append({"t_ms": round((time.monotonic() - started) * 1000), "event": kind, "data": data})
+                events.append(
+                    {
+                        "t_ms": round((time.monotonic() - started) * 1000),
+                        "event": kind,
+                        "data": data,
+                    }
+                )
                 note = data.get("kind") or kind
-                print(f"  {events[-1]['t_ms'] / 1000:7.1f} s  {note} {data.get('name', '')}", flush=True)
-    trace_id = next((e["data"].get("trace_id") for e in reversed(events) if e["data"].get("trace_id")), None)
+                print(
+                    f"  {events[-1]['t_ms'] / 1000:7.1f} s  {note} {data.get('name', '')}",
+                    flush=True,
+                )
+    trace_id = next(
+        (
+            e["data"].get("trace_id")
+            for e in reversed(events)
+            if e["data"].get("trace_id")
+        ),
+        None,
+    )
     trace = client.get(f"/api/agent/traces/{trace_id}").json() if trace_id else None
-    return {"question": question, "wall_ms": round((time.monotonic() - started) * 1000), "events": events, "trace": trace}
+    return {
+        "question": question,
+        "wall_ms": round((time.monotonic() - started) * 1000),
+        "events": events,
+        "trace": trace,
+    }
 
 
 def main() -> int:
@@ -56,13 +77,22 @@ def main() -> int:
         for key, question in board["sentences"].items():
             print(f"== {key}: {question}", flush=True)
             run = ask(client, question)
-            (out / f"{key}.json").write_text(json.dumps(run, ensure_ascii=False, indent=2), encoding="utf-8")
+            (out / f"{key}.json").write_text(
+                json.dumps(run, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
             trace = run["trace"] or {}
             status = trace.get("status", "no trace")
-            print(f"   {status} in {run['wall_ms'] / 1000:.0f} s, model {trace.get('model')}", flush=True)
+            print(
+                f"   {status} in {run['wall_ms'] / 1000:.0f} s, model {trace.get('model')}",
+                flush=True,
+            )
             if status != "answered":
                 failed += 1
-    print("pass 1: every question answered" if not failed else f"pass 1: {failed} question(s) not answered")
+    print(
+        "pass 1: every question answered"
+        if not failed
+        else f"pass 1: {failed} question(s) not answered"
+    )
     return 1 if failed else 0
 
 
