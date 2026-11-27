@@ -42,8 +42,8 @@ Checking that path turned up three gaps:
   scripts download `web-dist.zip` from this repo's releases.
 - **The Ollama image is pinned** to `ollama/ollama:0.40.16`, the version the agent
   evaluation ran on, instead of `latest`.
-- **The demo video follows a shot script**
-  ([`docs/showcase/video-script.md`](../showcase/video-script.md)). It was recorded on
+- **The demo video follows a shot script** (`docs/showcase/video-script.md`, retired in
+  Phase 9 with this video; the README video since then is decision 0043). It was recorded on
   the 7.2 GB laptop with a fresh data dir and `qwen3:4b-instruct-2507`. A headless Chrome
   was driven over the DevTools protocol and its screencast frames were cut with ffmpeg, not
   a screen recorder, so the frames are a clean 1280 × 800 without the desktop. Every answer

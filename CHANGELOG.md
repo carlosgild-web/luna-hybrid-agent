@@ -4,6 +4,24 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Ver
 
 ## [Unreleased]
 
+Phase 9 of [PLAN_HYBRID.md](PLAN_HYBRID.md): the portfolio's showcase standard.
+
+### Added
+
+- **A README video on the real local model, under the hood.** Five questions on `qwen3:4b-instruct-2507` (Ollama, laptop CPU) inside a 1920x1080 stage with an "Under the hood" panel: the code behind each step and the data that passed through it, from the SSE steps, the stored trace, the retrieval inspector and the SQL guard. Model waits are cut to 1 s with their real length. On the 7.2 GB laptop it is recorded in two passes: the model runs alone, then the app replays its outputs while the browser records, and every step is checked against the first pass ([docs/video.md](docs/video.md), [decision 0043](docs/decisions/0043-readme-video-two-passes.md), tooling in [`video/`](video/)).
+- **The first README GIF and six screenshots**, from a Playwright project on the evaluation suite's scripted model against the real app (`e2e/showcase/`, [decision 0042](docs/decisions/0042-video-mode-and-gif-harness.md)).
+- **`start.cmd video`** (and `./start.sh video`): fresh demo data in `data-video\` at every start, on port 8010, the model warmed; your `data\` is not touched.
+- **`OLLAMA_TIMEOUT_S`**: how long to wait for one Ollama answer (default 300 s, as before). Raise it on a slow laptop; video mode uses 900.
+
+### Changed
+
+- The README follows the portfolio's standard: badges, the GIF and the video first, what the project demonstrates, the invariants with the file and test that enforce each, screenshots and the series.
+- The showcase files copied from local-rag-ollama (the GitHub Pages landing, the slide deck, its video, its social preview and 23 screenshots) and the hand-recorded v2.0.0 video and its stills are removed; `GETTING_STARTED.md` links the baseline's walkthrough.
+
+### Fixed
+
+- **An answer that arrived within 2 s of the question vanished from the chat** until the page was reloaded: the chat reloaded the session from a cache that held only the question.
+
 ## [2.0.0] - 2026-11-16
 
 The first release of **Luna Hybrid Agent**, the v1.0.1 app of [local-rag-ollama](https://github.com/carlosgild-web/local-rag-ollama) with an agent on top: Luna decides for each question whether to search the documents, query the business database, fetch an exchange rate, draw a chart or combine them, and shows every step. Phases 0–8 of [PLAN_HYBRID.md](PLAN_HYBRID.md).
