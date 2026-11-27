@@ -428,12 +428,28 @@ async function loadApp(page: Page, path: string) {
   await page.evaluate((p) => (window as any).stage.loadApp(p), path)
 }
 
-/** The page still paints: an animation frame within 5 s (finding F9: a frozen take). */
-async function assertPainting(page: Page, where: string) {
-  const ok = await page.evaluate(
-    () => new Promise<boolean>((r) => { const t = setTimeout(() => r(false), 5000); requestAnimationFrame(() => { clearTimeout(t); r(true) }) }),
-  )
-  if (!ok) throw new Error(`${where}: the browser stopped painting (display off or out of memory?)`)
+/**
+ * The page paints: an animation frame within 5 s. On the 7.2 GB laptop Edge stalled under
+ * memory pressure while the model ran (findings F9, F11); the video keeps time by repeating
+ * the last frame. Wait up to 3 min for it to paint again and log the stall as a wait, which
+ * compose.mjs cuts to 1 s with its real length in the label. Longer than that fails the take.
+ */
+async function waitPainting(page: Page, conductor: Conductor, where: string) {
+  const frame = () =>
+    page.evaluate(
+      () => new Promise<boolean>((r) => { const t = setTimeout(() => r(false), 5000); requestAnimationFrame(() => { clearTimeout(t); r(true) }) }),
+    )
+  if (await frame()) return
+  const from = conductor.now() - 5000
+  const deadline = Date.now() + 180_000
+  while (Date.now() < deadline) {
+    if (await frame()) {
+      conductor.waits.push({ from_ms: from, to_ms: conductor.now(), what: 'the browser catching up (low memory)' })
+      console.warn(`${where}: the browser stalled for ${Math.round((conductor.now() - from) / 1000)} s`)
+      return
+    }
+  }
+  throw new Error(`${where}: the browser stopped painting for over 3 min (out of memory?)`)
 }
 
 async function assertNoPaths(page: Page, where: string) {
@@ -534,7 +550,7 @@ for (const [provider, tag] of [['ollama', '@ollama'], ['scripted', '@demo-dry']]
     page.on('crash', () => conductor.setFailure(new Error('the page crashed (out of memory?)')))
     /** One chat turn in a new conversation, so each answer is alone on screen. */
     const ask = async (key: string, fresh = true) => {
-      await assertPainting(page, `before "${key}"`)
+      await waitPainting(page, conductor, `before "${key}"`)
       if (fresh) {
         await app.getByRole('button', { name: 'New conversation' }).click()
         await sleep(600)
@@ -547,7 +563,7 @@ for (const [provider, tag] of [['ollama', '@ollama'], ['scripted', '@demo-dry']]
       await typedRow
       await box.press('Enter')
       await until(conductor.waitTurn(), TURN_TIMEOUT_MS, `turn "${key}"`)
-      await assertPainting(page, `after "${key}"`)
+      await waitPainting(page, conductor, `after "${key}"`)
       const error = [...conductor.events].reverse().find((e) => e.turn === key && e.type === 'error')
       if (error) throw new Error(`turn "${key}" ended with an error: ${error.data?.detail}`)
       const model = conductor.traces[key]?.model

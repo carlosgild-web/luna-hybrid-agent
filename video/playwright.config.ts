@@ -28,6 +28,6 @@ export default defineConfig({
     // A take waits minutes for the model. If the display turns off or locks, Windows' native
     // occlusion tracking marks Edge's (hidden) window occluded and it stops painting: the
     // first Ollama take froze that way (finding F9).
-    launchOptions: { args: ['--disable-features=CalculateNativeWinOcclusion'] },
+    launchOptions: { args: ['--disable-features=CalculateNativeWinOcclusion', '--disable-gpu'] },
   },
 })

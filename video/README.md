@@ -14,7 +14,9 @@ npm run video:smoke         # ~10 s: the 1920x1080 stage -> out/smoke/ (any runn
 
 ## Record it
 
-1. Quit Ollama, set `OLLAMA_MAX_LOADED_MODELS=1`, start it again, and close memory-heavy apps.
+1. Restart Windows, quit Ollama, set `OLLAMA_MAX_LOADED_MODELS=1`, `OLLAMA_FLASH_ATTENTION=1` and
+   `OLLAMA_KV_CACHE_TYPE=q8_0`, start it again, and close every other app (F9-F11: on a 7.2 GB
+   laptop the browser stalls under memory pressure).
 2. `start.cmd video`: a fresh `data-video\` with the demo company, on port 8010, the model
    warmed (decision 0042). Your `data\` is not touched.
 3. `npm run video:ollama` (20-40 min on a laptop CPU). It writes to `out/ollama/`:
@@ -73,6 +75,7 @@ Three dry takes on the scripted model before the first Ollama take.
 | F8 | The chart turn calls `sales_report` first, which the chart scene has no row for | Expected | One generic row (cap `VIDEO_MAX_GENERIC=2`) |
 | F9 | First Ollama take (L6): the model calls took 139-153 s each, and the browser stopped painting after ~170 s while JavaScript kept running; the next click timed out. An idle page alone kept painting (probe, 160 s): the display going off (Windows' native occlusion tracking) or memory pressure (3.1 GB free) | Tooling | Edge runs with `CalculateNativeWinOcclusion` off, the take script keeps the display on, and the take checks for an animation frame before and after every turn |
 | F10 | Second Ollama take: in the hybrid question qwen3 asked for both tools in one call; the next call (qwen3 reloaded after bge-m3, a long prompt, the recorder on the CPU) hit the client's fixed 300 s timeout | Product (setting) | `OLLAMA_TIMEOUT_S` (default 300), 900 in video mode; a turn that ends in an error now stops the take with that error (decision 0042) |
+| F11 | Third Ollama take: the browser stopped painting the moment the first answer arrived, with the display on (3.3 GB free; the page file had peaked at 7.4 GB) | Tooling | Edge without its GPU process (`--disable-gpu`); Ollama with flash attention and an 8-bit KV cache; the take waits up to 3 min for painting to resume and logs the stall as a labelled wait, cut to 1 s like a model wait |
 
 Checked in every dry take: all 26 rows shown, 16 payloads equal the capture, the retrieval
 inspector's ranking equals the run's search, no local path in any payload or in the app's
