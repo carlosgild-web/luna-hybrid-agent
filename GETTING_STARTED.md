@@ -175,7 +175,7 @@ It ends with `11 ingested, 0 skipped`. `python -m app.cli seed-business-db` rebu
 
 ![Suggested shelves and tags](docs/showcase/img/04-suggestions.jpg)
 
-The [reviewer walkthrough](docs/walkthrough.md) goes through the same tour in more detail.
+The baseline app's [reviewer walkthrough](https://github.com/carlosgild-web/local-rag-ollama/blob/main/docs/walkthrough.md) (in `local-rag-ollama`) goes through the same tour in more detail.
 
 ## 6. Run the tests
 
