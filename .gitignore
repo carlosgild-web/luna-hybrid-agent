@@ -1,5 +1,6 @@
 # Data (never commit documents, DB, vectors, backups)
 data/
+data-video/
 # The folder compose.yaml mounts as /watch for watched folders (decision 0025)
 inbox/
 
