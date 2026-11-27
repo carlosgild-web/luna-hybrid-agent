@@ -14,8 +14,8 @@ explicit, optional exception behind `ALLOW_EXTERNAL_APIS`.
 
 The baseline is a fully local RAG app: Ollama for chat and embeddings, a FastAPI
 backend, and a React web UI to manage documents, versions, history and settings. It is
-published as a GitHub portfolio project (portfolio project #2; `local-rag-ollama` stays
-frozen as #1), so code quality, tests, README and "clone and run" experience matter.
+published as a GitHub portfolio project (portfolio project #2; `local-rag-ollama` is #1:
+it gets no new product features; its showcase follows the portfolio standard), so code quality, tests, README and "clone and run" experience matter.
 
 ## Stack (do not change without asking)
 

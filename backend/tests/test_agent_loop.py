@@ -543,3 +543,18 @@ def test_agent_settings():
     assert (limits.max_iterations, limits.tool_timeout_s, limits.token_budget) == (6, 20.0, 32_000)
     with pytest.raises(ValueError):
         Settings(_env_file=None, agent_max_iterations=0)
+
+
+def test_the_ollama_timeout_comes_from_settings(tmp_path):
+    """OLLAMA_TIMEOUT_S reaches both Ollama clients (decision 0042: video mode sets 900)."""
+    from app.core.config import Settings
+    from app.core.runtime import build_runtime
+
+    settings = Settings(_env_file=None, data_dir=tmp_path / "data", ollama_timeout_s=900)
+    runtime = build_runtime(settings)
+    try:
+        assert runtime.llm_client_for("qwen3:4b")._timeout == 900
+        assert runtime.embedding_client_for("bge-m3")._timeout == 900
+        assert Settings(_env_file=None, data_dir=tmp_path / "d2").ollama_timeout_s == 300
+    finally:
+        runtime.engine.dispose()

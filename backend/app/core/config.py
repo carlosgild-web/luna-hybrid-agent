@@ -30,6 +30,9 @@ class Settings(BaseSettings):
     ollama_base_url: str = "http://localhost:11434"
     chat_model: str = "llama3.1"
     embedding_model: str = "bge-m3"
+    # Seconds to wait for one Ollama answer. On a small CPU-only laptop a model call that
+    # has to reload the model and read a long prompt can take longer (decision 0042).
+    ollama_timeout_s: float = Field(300.0, gt=0)
 
     # Retrieval defaults (see PLAN.md section 6)
     chunk_size_tokens: int = 600

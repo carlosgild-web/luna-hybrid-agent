@@ -49,12 +49,16 @@ def build_runtime(settings: Settings) -> Runtime:
 
     def embedding_client_for(model: str) -> EmbeddingClient:
         if model not in embedding_clients:
-            embedding_clients[model] = OllamaEmbeddingClient(settings.ollama_base_url, model)
+            embedding_clients[model] = OllamaEmbeddingClient(
+                settings.ollama_base_url, model, timeout=settings.ollama_timeout_s
+            )
         return embedding_clients[model]
 
     def llm_client_for(model: str) -> LLMClient:
         if model not in llm_clients:
-            llm_clients[model] = OllamaLLMClient(settings.ollama_base_url, model)
+            llm_clients[model] = OllamaLLMClient(
+                settings.ollama_base_url, model, timeout=settings.ollama_timeout_s
+            )
         return llm_clients[model]
 
     return Runtime(

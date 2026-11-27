@@ -190,6 +190,19 @@ points section.
 **Done when:** a reviewer with Docker runs the demo in ≤5 commands and the README
 explains in 2 minutes why this is harder than plain RAG.
 
+### Phase 9 — Portfolio showcase standard (2026-11-27)
+The portfolio-wide README, GIF and video standard. Re-record the video with an
+"Under the hood" panel on the real local model (`qwen3:4b-instruct-2507-q4_K_M` on
+Ollama; waits over 3 s cut to 1 s with the real length in the label), make the
+first README GIF on the agent suite's scripted model against the real tools and
+seeded database, bring the README to the standard section order, and remove the
+showcase files inherited from `local-rag-ollama`. Product code changes only for
+`start.cmd video` (a fresh seeded `data-video/` at every start). Decisions 0042
+(video mode and GIF harness) and 0043 (the README video).
+**Done when:** the GIF (≤ 6 MB, 25-35 s) and the video (2:15-2:45, < 10 MB README
+copy) are on the README, every README link and invariant path resolves, the test
+counts come from a real run, and release v2.1.0 is published.
+
 Total: ~12–14 days of sessions.
 
 ## 8. Risks

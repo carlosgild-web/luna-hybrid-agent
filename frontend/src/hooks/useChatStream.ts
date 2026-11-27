@@ -96,9 +96,11 @@ export function useChatStream(onSession: (id: number) => void) {
         }
         if (session !== null) {
           // Load the saved messages before dropping the pending answer, so
-          // the view never flashes empty.
+          // the view never flashes empty. staleTime 0: the copy cached at the
+          // `session` event holds only the question, and a run that ends within
+          // the default staleTime (2 s) would otherwise drop the answer.
           const id = session;
-          await client.fetchQuery({ queryKey: keys.session(id), queryFn: () => api.session(id) });
+          await client.fetchQuery({ queryKey: keys.session(id), queryFn: () => api.session(id), staleTime: 0 });
         }
         await client.invalidateQueries({ queryKey: keys.sessions });
         setPending(null);

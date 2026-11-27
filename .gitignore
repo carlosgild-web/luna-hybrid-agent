@@ -1,5 +1,6 @@
 # Data (never commit documents, DB, vectors, backups)
 data/
+data-video/
 # The folder compose.yaml mounts as /watch for watched folders (decision 0025)
 inbox/
 
@@ -34,3 +35,12 @@ Thumbs.db
 
 # Logs
 *.log
+
+# The README showcase (e2e/showcase): its scratch data and Playwright output
+e2e/showcase/node_modules/
+e2e/showcase/.tmp/
+e2e/showcase/test-results/
+
+# The README video (video/): takes and dependencies
+video/out/
+video/node_modules/

@@ -1,0 +1,12 @@
+{
+  "name": "luna-hybrid-agent-showcase",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "showcase": "npm --prefix ../../frontend run build && playwright test --grep-invert @gif",
+    "showcase:gif": "npm --prefix ../../frontend run build && playwright test --grep @gif"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.65.1"
+  }
+}
