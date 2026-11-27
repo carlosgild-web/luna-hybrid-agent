@@ -644,6 +644,14 @@ for (const [provider, tag] of [['ollama', '@ollama'], ['scripted', '@demo-dry']]
       if (traceId == null) throw new Error('no trace for the hybrid question')
       await loadApp(page, `/agent/${traceId}`)
       await expect(app.getByRole('heading', { name: /Agent run #/ })).toBeVisible()
+      // The console's health bar warns that qwen3 wouldn't fit in memory now: true in pass 2,
+      // where the model isn't loaded, and not what this scene is about. Its own close button.
+      // The bar comes with the health check, a moment after the page.
+      const hideWarning = app.getByTitle('Hide until the next visit')
+      if (await hideWarning.waitFor({ timeout: 10_000 }).then(() => true, () => false)) {
+        await sleep(800)
+        await hideWarning.click()
+      }
       await sleep(1200)
       await conductor.step('inspector')
       const step = app.getByRole('button', { name: /sales_report.*Reading the sales records/ }).first()
