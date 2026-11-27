@@ -12,23 +12,30 @@ npm run video:test          # how compose.mjs cuts a take
 npm run video:smoke         # ~10 s: the 1920x1080 stage -> out/smoke/ (any running app)
 ```
 
-## Record it
+## Record it (two passes, decision 0043)
 
-1. Restart Windows, quit Ollama, set `OLLAMA_MAX_LOADED_MODELS=1`, `OLLAMA_FLASH_ATTENTION=1` and
-   `OLLAMA_KV_CACHE_TYPE=q8_0`, start it again, and close every other app (F9-F11: on a 7.2 GB
-   laptop the browser stalls under memory pressure).
-2. `start.cmd video`: a fresh `data-video\` with the demo company, on port 8010, the model
-   warmed (decision 0042). Your `data\` is not touched.
-3. `npm run video:ollama` (20-40 min on a laptop CPU). It writes to `out/ollama/`:
+On the 7.2 GB development laptop qwen3 and the recording browser don't fit together, so the
+model runs first, alone, and the recording replays its outputs:
+
+1. Restart Windows, close every other app, and set `OLLAMA_MAX_LOADED_MODELS=1` for Ollama.
+2. **Pass 1:** `start.cmd video`, then
+   `backend/.venv/Scripts/python video/capture.py --out video/out/pass1`: the five questions on
+   qwen3 through the app's chat API, no browser. Then `start.cmd video stop`.
+3. **Pass 2:** `start.cmd video` again (fresh data), `start.cmd video stop`, `ollama stop` the
+   model, then start `video/replay_server.py --pass1 video/out/pass1` with the same settings
+   (`DATA_DIR=data-video`, `AGENT_MODEL`, `EMBEDDING_MODEL=bge-m3`) and run
+   `VIDEO_REPLAY_DIR=video/out/pass1 npm run video:ollama`. It writes to `out/ollama/`:
    - `take.webm`, the stage as recorded;
    - `video.mp4`, with every model wait over 3 s shortened to 1 s and labelled with its
-     real length;
+     real length (pass 1's);
    - `video-readme.mp4` (1280x720, under 10 MB), `poster.png` and `subtitles.en.srt`;
-   - `take.json` (the models the runs used, the rows that never matched), `events.json`,
+   - `take.json` (the models, the rows that never matched, `replay_of`), `events.json`,
      `shown.json`, `trace-<turn>.json`, `inspect-hybrid.json`.
 
 `npm run video:verify` re-checks a take: rows, every payload against the capture, the
-search ranking against the take's own search, the models, no paths.
+search ranking against the take's own search, every step against pass 1, the models, no
+paths. On a machine with 16 GB or more, one live pass works too: `start.cmd video`, then
+`npm run video:ollama` without `VIDEO_REPLAY_DIR`.
 
 ### The dry run
 
@@ -50,6 +57,7 @@ cd video && BASE_URL=http://127.0.0.1:8020 npm run video:demo-dry   # -> out/dem
 | `payload.mjs` | How a row's payload is cut from the capture; shared by the take and the checks |
 | `lines.mjs` | `file:symbol` → current line and excerpt |
 | `introspect.py` | The SQL guard's verdict from the backend's own `check_select` (read only, backend venv) |
+| `capture.py`, `replay_server.py` | Pass 1 (the questions on Ollama, no browser) and pass 2 (the app replaying pass 1's model outputs) |
 | `cues.mjs`, `compose.mjs` | Cues, checks, wait cuts, `.mp4`, `.srt`, the README copy (ffmpeg) |
 | `compose.test.mjs` | `npm run video:test` |
 
@@ -76,6 +84,7 @@ Three dry takes on the scripted model before the first Ollama take.
 | F9 | First Ollama take (L6): the model calls took 139-153 s each, and the browser stopped painting after ~170 s while JavaScript kept running; the next click timed out. An idle page alone kept painting (probe, 160 s): the display going off (Windows' native occlusion tracking) or memory pressure (3.1 GB free) | Tooling | Edge runs with `CalculateNativeWinOcclusion` off, the take script keeps the display on, and the take checks for an animation frame before and after every turn |
 | F10 | Second Ollama take: in the hybrid question qwen3 asked for both tools in one call; the next call (qwen3 reloaded after bge-m3, a long prompt, the recorder on the CPU) hit the client's fixed 300 s timeout | Product (setting) | `OLLAMA_TIMEOUT_S` (default 300), 900 in video mode; a turn that ends in an error now stops the take with that error (decision 0042) |
 | F11 | Third Ollama take: the browser stopped painting the moment the first answer arrived, with the display on (3.3 GB free; the page file had peaked at 7.4 GB) | Tooling | Edge without its GPU process (`--disable-gpu`); Ollama with flash attention and an 8-bit KV cache; the take waits up to 3 min for painting to resume and logs the stall as a labelled wait, cut to 1 s like a model wait |
+| F12 | Fourth Ollama take: with `OLLAMA_TIMEOUT_S=900` the hybrid call ran past 900 s; flash attention and the 8-bit KV cache made qwen3 ~45 % slower on this CPU | Method | Two passes (decision 0043): the model runs alone (`capture.py`), then the app replays its outputs while the browser records (`replay_server.py`); `cues.mjs` checks the take step for step against pass 1. Flash attention and the 8-bit cache dropped |
 
 Checked in every dry take: all 26 rows shown, 16 payloads equal the capture, the retrieval
 inspector's ranking equals the run's search, no local path in any payload or in the app's

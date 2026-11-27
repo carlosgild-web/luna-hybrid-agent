@@ -6,7 +6,9 @@
  *   - every payload on screen equals the capture it names (events.json, trace-<turn>.json,
  *     inspect-<turn>.json, or a fresh run of introspect.py), cut the same way (payload.mjs);
  *   - the ranking the retrieval inspector shows is the order the take's search returned;
- *   - every run used a model the storyboard allows, and no payload shows a local path.
+ *   - every run used a model the storyboard allows, and no payload shows a local path;
+ *   - a replayed take (two passes, decision 0043): every model step, tool call, tool result
+ *     and answer equals pass 1's run of the same question.
  *
  *   node cues.mjs out/ollama            build cues.json and check
  *   node cues.mjs out/ollama --verify   check only
@@ -85,6 +87,21 @@ function verify(dir, storyboard, shown, take) {
     const ranked = (inspect?.chunks ?? []).filter((c) => c.sent).map((c) => c.chunk_id).slice(0, returned.length)
     if (!returned.length || !isDeepStrictEqual(ranked, returned))
       problems.push(`${turn}: the inspector ranks ${ranked} but the search returned ${returned}`)
+  }
+
+  // A replayed take is pass 1's runs, step for step: the model's outputs (replayed) and the
+  // tools' results (run again live) must both be equal.
+  if (take.replay_of) {
+    const strip = (steps) =>
+      steps.map((s) => (s.kind === 'llm' ? { kind: s.kind, content: s.content, tool_calls: s.tool_calls } : { kind: s.kind, name: s.name, arguments: s.arguments, ok: s.ok, result: s.result }))
+    for (const turn of Object.keys(storyboard.sentences)) {
+      const live = file(`trace-${turn}.json`)
+      if (!live) continue
+      const pass1 = readJson(join(resolve(HERE, '..', take.replay_of), `${turn}.json`)).trace
+      if (!isDeepStrictEqual(strip(live.steps), strip(pass1.steps))) problems.push(`${turn}: the take's steps differ from pass 1`)
+      else if (live.answer !== pass1.answer) problems.push(`${turn}: the take's answer differs from pass 1`)
+      else notes.push(`${turn}: the same ${live.steps.length} steps and answer as pass 1`)
+    }
   }
 
   // Every run used a model the storyboard allows (the banner names it).

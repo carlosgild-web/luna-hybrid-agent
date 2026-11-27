@@ -473,6 +473,8 @@ async function saveTake(conductor: Conductor, page: Page, context: import('@play
     missing: conductor.missing(),
     generic_skipped: conductor.skippedGeneric,
     failure: conductor.failure?.message ?? null,
+    // Two passes (decision 0043): the folder of pass 1's runs that the app replayed.
+    replay_of: process.env.VIDEO_REPLAY_DIR ?? null,
     ...extra,
   }
   writeFileSync(join(outDir, 'take.json'), JSON.stringify(take, null, 2))
